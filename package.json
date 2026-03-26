@@ -1,0 +1,35 @@
+{
+  "name": "kadaclaw",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "rspack serve --host 127.0.0.1 --port 1420",
+    "build": "tsc && rspack build",
+    "preview": "rspack serve --mode production --host 127.0.0.1 --port 1420",
+    "icons:generate": "python3 scripts/generate_icons.py",
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build",
+    "tauri:build--no-sign": "npm run tauri:build -- --no-sign",
+    "check": "tsc --noEmit && cargo check --manifest-path src-tauri/Cargo.toml"
+  },
+  "dependencies": {
+    "@ant-design/icons": "^6.0.0",
+    "@tauri-apps/api": "^2.3.0",
+    "antd": "^5.27.3",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "zustand": "^5.0.3"
+  },
+  "devDependencies": {
+    "@rspack/cli": "^1.2.8",
+    "@rspack/core": "^1.2.8",
+    "@tauri-apps/cli": "^2.3.1",
+    "@types/react": "^18.3.20",
+    "@types/react-dom": "^18.3.6",
+    "ts-loader": "^9.5.2",
+    "typescript": "^5.8.2",
+    "webpack-dev-server": "^5.2.0"
+  }
+}

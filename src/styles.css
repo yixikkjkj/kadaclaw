@@ -1,0 +1,547 @@
+:root {
+  font-family: "Noto Sans SC", "PingFang SC", sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  color: #1c231f;
+  background:
+    radial-gradient(circle at top left, rgba(20, 97, 83, 0.26), transparent 24%),
+    radial-gradient(circle at right center, rgba(216, 137, 54, 0.18), transparent 20%),
+    linear-gradient(135deg, #eef3eb 0%, #f8f4ea 48%, #f1efe7 100%);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  --shell-bg: rgba(255, 255, 255, 0.76);
+  --shell-border: rgba(28, 35, 31, 0.08);
+  --panel-shadow: 0 18px 50px rgba(43, 62, 52, 0.09);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  min-height: 100vh;
+}
+
+.app-shell {
+  min-height: 100vh;
+  background: transparent;
+}
+
+.app-sider.ant-layout-sider {
+  background:
+    linear-gradient(180deg, rgba(248, 245, 236, 0.9) 0%, rgba(237, 244, 239, 0.86) 100%);
+  backdrop-filter: blur(18px);
+  border-right: 1px solid var(--shell-border);
+  padding: 24px 18px;
+}
+
+.brand-panel {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 24px;
+}
+
+.brand-mark {
+  width: 52px;
+  height: 52px;
+  border-radius: 18px;
+  display: grid;
+  place-items: center;
+  color: #f4f0e8;
+  font-size: 24px;
+  font-weight: 700;
+  background: linear-gradient(135deg, #0f7b6c 0%, #21443b 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+
+.nav-menu.ant-menu {
+  background: transparent;
+  border-inline-end: none;
+}
+
+.nav-menu.ant-menu .ant-menu-item {
+  height: 48px;
+  margin-block: 6px;
+  border-radius: 14px;
+}
+
+.nav-menu.ant-menu .ant-menu-item-selected {
+  background: linear-gradient(135deg, rgba(15, 123, 108, 0.16), rgba(15, 123, 108, 0.06));
+}
+
+.sidebar-overview.ant-card {
+  margin-bottom: 18px;
+  border-radius: 24px;
+}
+
+.status-card,
+.hero-card,
+.market-toolbar,
+.skill-card,
+.spotlight-panel,
+.app-content .ant-card {
+  background: var(--shell-bg);
+  border: 1px solid var(--shell-border);
+  box-shadow: var(--panel-shadow);
+}
+
+.status-card {
+  margin-top: 20px;
+  border-radius: 24px;
+}
+
+.compact-card {
+  padding-block: 4px;
+}
+
+.app-header {
+  background: transparent;
+  padding: 28px 32px 10px;
+  height: auto;
+  line-height: normal;
+}
+
+.app-content {
+  padding: 18px 32px 32px;
+}
+
+.panel-card.ant-card,
+.metric-card.ant-card,
+.market-toolbar.ant-card,
+.hero-card.ant-card,
+.skill-card.ant-card {
+  border-radius: 26px;
+}
+
+.hero-tag {
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 14px;
+}
+
+.workspace-hero {
+  overflow: hidden;
+}
+
+.workspace-hero-grid {
+  display: grid;
+  grid-template-columns: 1.5fr 0.9fr;
+  gap: 24px;
+}
+
+.settings-hero-grid {
+  display: grid;
+  grid-template-columns: 1.45fr 0.95fr;
+  gap: 24px;
+}
+
+.workspace-copy {
+  position: relative;
+}
+
+.workspace-title {
+  margin-top: 18px !important;
+  margin-bottom: 12px !important;
+  max-width: 760px;
+}
+
+.workspace-aside {
+  display: flex;
+  align-items: stretch;
+}
+
+.hero-pill-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.hero-pill {
+  padding: 14px 16px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.54);
+  border: 1px solid rgba(28, 35, 31, 0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.hero-pill strong {
+  font-size: 15px;
+}
+
+.hero-copy {
+  max-width: 720px;
+  font-size: 16px;
+}
+
+.status-strip {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: rgba(15, 123, 108, 0.08);
+  border-radius: 999px;
+}
+
+.status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: #0f7b6c;
+  box-shadow: 0 0 0 6px rgba(15, 123, 108, 0.14);
+}
+
+.runtime-panel.ant-card .ant-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.runtime-panel-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.runtime-orb {
+  width: 72px;
+  height: 72px;
+  border-radius: 999px;
+  background:
+    radial-gradient(circle at 35% 35%, rgba(255,255,255,0.92), rgba(255,255,255,0.2) 28%, transparent 34%),
+    linear-gradient(135deg, rgba(15,123,108,0.95), rgba(217,138,50,0.82));
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.3),
+    0 18px 40px rgba(15, 123, 108, 0.22);
+}
+
+.runtime-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.runtime-meta-grid div {
+  padding: 12px 14px;
+  border-radius: 18px;
+  background: rgba(15, 123, 108, 0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.runtime-meta-grid strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.timeline-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.chat-shell.ant-card .ant-card-body {
+  padding: 0;
+}
+
+.chat-panel {
+  min-height: 680px;
+  display: flex;
+  flex-direction: column;
+}
+
+.chat-panel-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 24px 24px 0;
+}
+
+.chat-session-chip {
+  min-width: 190px;
+  padding: 14px 16px;
+  border-radius: 20px;
+  background: rgba(15, 123, 108, 0.07);
+  border: 1px solid rgba(15, 123, 108, 0.12);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.chat-auth-alert {
+  margin: 16px 24px 0;
+}
+
+.chat-message-list {
+  flex: 1;
+  overflow: auto;
+  padding: 18px 24px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  background:
+    radial-gradient(circle at top left, rgba(15, 123, 108, 0.08), transparent 28%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.48) 0%, rgba(243, 241, 234, 0.7) 100%);
+}
+
+.chat-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.chat-row.user {
+  justify-content: flex-end;
+}
+
+.chat-row.user .chat-avatar {
+  order: 2;
+  background: linear-gradient(135deg, #21443b 0%, #0f7b6c 100%);
+}
+
+.chat-row.user .chat-bubble {
+  order: 1;
+  background: linear-gradient(135deg, #184b42 0%, #0f7b6c 100%);
+  color: #f6f4ed;
+}
+
+.chat-row.user .chat-bubble .ant-typography,
+.chat-row.user .chat-bubble .ant-typography-secondary {
+  color: inherit;
+}
+
+.chat-row.assistant .chat-avatar {
+  background: linear-gradient(135deg, #d98a32 0%, #b4681b 100%);
+}
+
+.chat-row.system .chat-avatar {
+  background: #7f8a84;
+}
+
+.chat-bubble {
+  max-width: min(82%, 780px);
+  padding: 14px 16px;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(28, 35, 31, 0.08);
+  box-shadow: 0 14px 30px rgba(31, 43, 38, 0.08);
+}
+
+.chat-bubble-loading {
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.chat-meta {
+  margin-bottom: 6px;
+}
+
+.chat-content.ant-typography {
+  margin-bottom: 0;
+  white-space: pre-wrap;
+}
+
+.chat-alert {
+  margin: 0 24px 18px;
+}
+
+.chat-composer {
+  padding: 18px 24px 24px;
+  border-top: 1px solid rgba(28, 35, 31, 0.08);
+  background: rgba(249, 247, 240, 0.88);
+}
+
+.chat-composer-footer {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.market-hero {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.market-stats {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.market-copy {
+  max-width: 760px;
+}
+
+.market-stat-chip {
+  padding: 10px 14px;
+  border-radius: 999px;
+  background: rgba(15, 123, 108, 0.08);
+  border: 1px solid rgba(15, 123, 108, 0.1);
+}
+
+.market-feature-band {
+  margin-top: 18px;
+  padding: 16px 18px;
+  border-radius: 22px;
+  background: linear-gradient(135deg, rgba(15, 123, 108, 0.08), rgba(217, 138, 50, 0.08));
+  display: grid;
+  grid-template-columns: 1.5fr 1fr;
+  gap: 16px;
+  align-items: center;
+}
+
+.feature-band-title {
+  margin-top: 6px;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.skill-avatar-shell,
+.list-avatar {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 16px;
+  color: #fdfaf4;
+  font-weight: 700;
+  background: linear-gradient(135deg, #0f7b6c 0%, #2f6955 100%);
+}
+
+.list-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 14px;
+}
+
+.elevated-card.ant-card {
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+}
+
+.elevated-card.ant-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 4px;
+  background: linear-gradient(90deg, #0f7b6c, #d98a32);
+}
+
+.skill-summary {
+  min-height: 52px;
+  margin-top: 18px;
+}
+
+.skill-metric-strip {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.skill-metric-strip div {
+  padding: 10px 12px;
+  border-radius: 16px;
+  background: rgba(15, 123, 108, 0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.skill-metric-strip span {
+  color: rgba(28, 35, 31, 0.56);
+}
+
+.featured-avatar {
+  background: linear-gradient(135deg, #d98a32 0%, #0f7b6c 100%);
+}
+
+.skill-card .ant-card-body {
+  min-height: 280px;
+}
+
+.inner-card.ant-card {
+  height: 100%;
+}
+
+.control-frame {
+  width: 100%;
+  min-height: 720px;
+  border: 0;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.console-card.ant-card .ant-card-head {
+  border-bottom-color: rgba(28, 35, 31, 0.06);
+}
+
+.console-empty {
+  padding: 40px 8px 16px;
+  text-align: center;
+}
+
+.bootstrap-card {
+  max-width: 760px;
+}
+
+.installed-hero.ant-card .ant-list-item {
+  padding-inline: 0;
+}
+
+.installed-capability-card.ant-card {
+  background: linear-gradient(180deg, rgba(255,255,255,0.82), rgba(239,244,239,0.72));
+}
+
+@media (max-width: 992px) {
+  .app-shell.ant-layout {
+    flex-direction: column;
+  }
+
+  .app-sider.ant-layout-sider {
+    width: 100% !important;
+    max-width: none !important;
+    flex: 0 0 auto !important;
+  }
+
+  .app-header {
+    padding: 20px 20px 8px;
+  }
+
+  .app-content {
+    padding: 12px 20px 20px;
+  }
+
+  .workspace-hero-grid,
+  .settings-hero-grid,
+  .market-hero,
+  .market-feature-band,
+  .timeline-row {
+    grid-template-columns: 1fr;
+    flex-direction: column;
+  }
+
+  .hero-pill-grid,
+  .runtime-meta-grid,
+  .skill-metric-strip {
+    grid-template-columns: 1fr;
+  }
+}

@@ -1,0 +1,501 @@
+.appShell {
+  min-height: 100vh;
+  background: transparent;
+}
+
+.appSider:global(.ant-layout-sider) {
+  background:
+    linear-gradient(180deg, rgba(248, 245, 236, 0.9) 0%, rgba(237, 244, 239, 0.86) 100%);
+  backdrop-filter: blur(18px);
+  border-right: 1px solid var(--shell-border);
+  padding: 24px 18px;
+}
+
+.brandPanel {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 24px;
+}
+
+.brandMark {
+  width: 52px;
+  height: 52px;
+  border-radius: 18px;
+  display: grid;
+  place-items: center;
+  color: #f4f0e8;
+  font-size: 24px;
+  font-weight: 700;
+  background: linear-gradient(135deg, #0f7b6c 0%, #21443b 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+
+.navMenu:global(.ant-menu) {
+  background: transparent;
+  border-inline-end: none;
+}
+
+.navMenu:global(.ant-menu) :global(.ant-menu-item) {
+  height: 48px;
+  margin-block: 6px;
+  border-radius: 14px;
+}
+
+.navMenu:global(.ant-menu) :global(.ant-menu-item-selected) {
+  background: linear-gradient(135deg, rgba(15, 123, 108, 0.16), rgba(15, 123, 108, 0.06));
+}
+
+.sidebarOverview:global(.ant-card) {
+  margin-bottom: 18px;
+  border-radius: 24px;
+}
+
+.statusCard,
+.heroCard,
+.marketToolbar,
+.skillCard,
+.spotlightPanel,
+.appContent :global(.ant-card) {
+  background: var(--shell-bg);
+  border: 1px solid var(--shell-border);
+  box-shadow: var(--panel-shadow);
+}
+
+.statusCard {
+  margin-top: 20px;
+  border-radius: 24px;
+}
+
+.compactCard {
+  padding-block: 4px;
+}
+
+.appHeader {
+  background: transparent;
+  padding: 28px 32px 10px;
+  height: auto;
+  line-height: normal;
+}
+
+.appContent {
+  padding: 18px 32px 32px;
+}
+
+.panelCard:global(.ant-card),
+.metricCard:global(.ant-card),
+.marketToolbar:global(.ant-card),
+.heroCard:global(.ant-card),
+.skillCard:global(.ant-card) {
+  border-radius: 26px;
+}
+
+.heroTag {
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 14px;
+}
+
+.workspaceHero {
+  overflow: hidden;
+}
+
+.workspaceHeroGrid {
+  display: grid;
+  grid-template-columns: 1.5fr 0.9fr;
+  gap: 24px;
+}
+
+.settingsHeroGrid {
+  display: grid;
+  grid-template-columns: 1.45fr 0.95fr;
+  gap: 24px;
+}
+
+.settingsHero {
+  overflow: hidden;
+}
+
+.workspaceCopy {
+  position: relative;
+}
+
+.workspaceTitle {
+  margin-top: 18px !important;
+  margin-bottom: 12px !important;
+  max-width: 760px;
+}
+
+.workspaceAside {
+  display: flex;
+  align-items: stretch;
+}
+
+.heroPillGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.heroPill {
+  padding: 14px 16px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.54);
+  border: 1px solid rgba(28, 35, 31, 0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.heroPill strong {
+  font-size: 15px;
+}
+
+.heroCopy {
+  max-width: 720px;
+  font-size: 16px;
+}
+
+.statusStrip {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: rgba(15, 123, 108, 0.08);
+  border-radius: 999px;
+}
+
+.statusDot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: #0f7b6c;
+  box-shadow: 0 0 0 6px rgba(15, 123, 108, 0.14);
+}
+
+.runtimePanel:global(.ant-card) :global(.ant-card-body) {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.runtimePanelHead {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.runtimeOrb {
+  width: 72px;
+  height: 72px;
+  border-radius: 999px;
+  background:
+    radial-gradient(circle at 35% 35%, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.2) 28%, transparent 34%),
+    linear-gradient(135deg, rgba(15, 123, 108, 0.95), rgba(217, 138, 50, 0.82));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.3),
+    0 18px 40px rgba(15, 123, 108, 0.22);
+}
+
+.runtimeMetaGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.runtimeMetaGrid div {
+  padding: 12px 14px;
+  border-radius: 18px;
+  background: rgba(15, 123, 108, 0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.runtimeMetaGrid strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.timelineRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.chatShell:global(.ant-card) :global(.ant-card-body) {
+  padding: 0;
+}
+
+.chatPanel {
+  min-height: 680px;
+  display: flex;
+  flex-direction: column;
+}
+
+.chatPanelHead {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 24px 24px 0;
+}
+
+.chatSessionChip {
+  min-width: 190px;
+  padding: 14px 16px;
+  border-radius: 20px;
+  background: rgba(15, 123, 108, 0.07);
+  border: 1px solid rgba(15, 123, 108, 0.12);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.chatAuthAlert {
+  margin: 16px 24px 0;
+}
+
+.chatMessageList {
+  flex: 1;
+  overflow: auto;
+  padding: 18px 24px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  background:
+    radial-gradient(circle at top left, rgba(15, 123, 108, 0.08), transparent 28%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.48) 0%, rgba(243, 241, 234, 0.7) 100%);
+}
+
+.chatRow {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.userRow {
+  justify-content: flex-end;
+}
+
+.userRow .chatAvatar {
+  order: 2;
+  background: linear-gradient(135deg, #21443b 0%, #0f7b6c 100%);
+}
+
+.userRow .chatBubble {
+  order: 1;
+  background: linear-gradient(135deg, #184b42 0%, #0f7b6c 100%);
+  color: #f6f4ed;
+}
+
+.userRow .chatBubble :global(.ant-typography),
+.userRow .chatBubble :global(.ant-typography-secondary) {
+  color: inherit;
+}
+
+.assistantRow .chatAvatar {
+  background: linear-gradient(135deg, #d98a32 0%, #b4681b 100%);
+}
+
+.systemRow .chatAvatar {
+  background: #7f8a84;
+}
+
+.chatBubble {
+  max-width: min(82%, 780px);
+  padding: 14px 16px;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(28, 35, 31, 0.08);
+  box-shadow: 0 14px 30px rgba(31, 43, 38, 0.08);
+}
+
+.chatBubbleLoading {
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.chatMeta {
+  margin-bottom: 6px;
+}
+
+.chatContent:global(.ant-typography) {
+  margin-bottom: 0;
+  white-space: pre-wrap;
+}
+
+.chatAlert {
+  margin: 0 24px 18px;
+}
+
+.chatComposer {
+  padding: 18px 24px 24px;
+  border-top: 1px solid rgba(28, 35, 31, 0.08);
+  background: rgba(249, 247, 240, 0.88);
+}
+
+.chatComposerFooter {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.marketHero {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.marketStats {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.marketCopy {
+  max-width: 760px;
+}
+
+.marketStatChip {
+  padding: 10px 14px;
+  border-radius: 999px;
+  background: rgba(15, 123, 108, 0.08);
+  border: 1px solid rgba(15, 123, 108, 0.1);
+}
+
+.marketFeatureBand {
+  margin-top: 18px;
+  padding: 16px 18px;
+  border-radius: 22px;
+  background: linear-gradient(135deg, rgba(15, 123, 108, 0.08), rgba(217, 138, 50, 0.08));
+  display: grid;
+  grid-template-columns: 1.5fr 1fr;
+  gap: 16px;
+  align-items: center;
+}
+
+.featureBandTitle {
+  margin-top: 6px;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.skillAvatarShell,
+.listAvatar {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 16px;
+  color: #fdfaf4;
+  font-weight: 700;
+  background: linear-gradient(135deg, #0f7b6c 0%, #2f6955 100%);
+}
+
+.listAvatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 14px;
+}
+
+.elevatedCard:global(.ant-card) {
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+}
+
+.elevatedCard:global(.ant-card)::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 4px;
+  background: linear-gradient(90deg, #0f7b6c, #d98a32);
+}
+
+.skillSummary {
+  min-height: 52px;
+  margin-top: 18px;
+}
+
+.skillMetricStrip {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.skillMetricStrip div {
+  padding: 10px 12px;
+  border-radius: 16px;
+  background: rgba(15, 123, 108, 0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.skillMetricStrip span {
+  color: rgba(28, 35, 31, 0.56);
+}
+
+.featuredAvatar {
+  background: linear-gradient(135deg, #d98a32 0%, #0f7b6c 100%);
+}
+
+.skillCard :global(.ant-card-body) {
+  min-height: 280px;
+}
+
+.innerCard:global(.ant-card) {
+  height: 100%;
+}
+
+.bootstrapCard {
+  max-width: 760px;
+}
+
+.installedHero:global(.ant-card) :global(.ant-list-item) {
+  padding-inline: 0;
+}
+
+.installedCapabilityCard:global(.ant-card) {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.82), rgba(239, 244, 239, 0.72));
+}
+
+@media (max-width: 992px) {
+  .appShell:global(.ant-layout) {
+    flex-direction: column;
+  }
+
+  .appSider:global(.ant-layout-sider) {
+    width: 100% !important;
+    max-width: none !important;
+    flex: 0 0 auto !important;
+  }
+
+  .appHeader {
+    padding: 20px 20px 8px;
+  }
+
+  .appContent {
+    padding: 12px 20px 20px;
+  }
+
+  .workspaceHeroGrid,
+  .settingsHeroGrid,
+  .marketHero,
+  .marketFeatureBand,
+  .timelineRow {
+    grid-template-columns: 1fr;
+    flex-direction: column;
+  }
+
+  .heroPillGrid,
+  .runtimeMetaGrid,
+  .skillMetricStrip {
+    grid-template-columns: 1fr;
+  }
+}

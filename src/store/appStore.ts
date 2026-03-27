@@ -1,7 +1,6 @@
 import { create } from "zustand";
-import { skills } from "../data/skills";
+import type { InstalledSkillRecord, MarketSkillSummary, MarketSkillSort } from "~/api";
 
-export type AppView = "workspace" | "market" | "installed" | "settings";
 export type ChatRole = "user" | "assistant" | "system";
 
 export interface ChatMessage {
@@ -23,23 +22,29 @@ const initialChatMessages: ChatMessage[] = [
 ];
 
 interface AppState {
-  currentView: AppView;
   search: string;
-  category: string;
+  marketSort: MarketSkillSort;
   installedSkillIds: string[];
+  installedSkills: InstalledSkillRecord[];
   recognizedSkillIds: string[];
   readySkillIds: string[];
+  marketSkills: MarketSkillSummary[];
+  skillOperations: Record<string, "installing" | "removing">;
+  skillOperationError: string | null;
   selectedSkillId: string | null;
   skillDrawerOpen: boolean;
   runtimeStatus: "idle" | "checking" | "ready" | "error";
   runtimeMessage: string;
   chatSessionId: string;
   chatMessages: ChatMessage[];
-  setView: (view: AppView) => void;
   setSearch: (search: string) => void;
-  setCategory: (category: string) => void;
-  setInstalledSkillIds: (skillIds: string[]) => void;
+  setMarketSort: (sort: MarketSkillSort) => void;
+  setInstalledSkills: (skills: InstalledSkillRecord[]) => void;
   setRecognizedSkills: (recognizedSkillIds: string[], readySkillIds: string[]) => void;
+  setMarketSkills: (skills: MarketSkillSummary[]) => void;
+  startSkillOperation: (skillId: string, action: "installing" | "removing") => void;
+  finishSkillOperation: (skillId: string) => void;
+  setSkillOperationError: (message: string | null) => void;
   setChatSessionId: (sessionId: string) => void;
   appendChatMessage: (message: ChatMessage) => void;
   resetChatSession: () => void;
@@ -48,34 +53,57 @@ interface AppState {
   setRuntimeState: (status: AppState["runtimeStatus"], message: string) => void;
 }
 
-const installedByDefault = skills
-  .filter((skill) => skill.installed)
-  .map((skill) => skill.id);
-
 export const useAppStore = create<AppState>((set) => ({
-  currentView: "market",
   search: "",
-  category: "全部",
-  installedSkillIds: installedByDefault,
+  marketSort: "updated",
+  installedSkillIds: [],
+  installedSkills: [],
   recognizedSkillIds: [],
   readySkillIds: [],
-  selectedSkillId: skills[0]?.id ?? null,
+  marketSkills: [],
+  skillOperations: {},
+  skillOperationError: null,
+  selectedSkillId: null,
   skillDrawerOpen: false,
   runtimeStatus: "idle",
   runtimeMessage: "尚未检测 OpenClaw runtime",
   chatSessionId: initialChatSessionId,
   chatMessages: initialChatMessages,
-  setView: (view) => set({ currentView: view }),
   setSearch: (search) => set({ search }),
-  setCategory: (category) => set({ category }),
-  setInstalledSkillIds: (skillIds) =>
+  setMarketSort: (marketSort) => set({ marketSort }),
+  setInstalledSkills: (installedSkills) =>
     set({
-      installedSkillIds: skillIds,
+      installedSkills,
+      installedSkillIds: installedSkills.map((skill) => skill.id),
     }),
   setRecognizedSkills: (recognizedSkillIds, readySkillIds) =>
     set({
       recognizedSkillIds,
       readySkillIds,
+    }),
+  setMarketSkills: (marketSkills) =>
+    set({
+      marketSkills,
+    }),
+  startSkillOperation: (skillId, action) =>
+    set((state) => ({
+      skillOperations: {
+        ...state.skillOperations,
+        [skillId]: action,
+      },
+      skillOperationError: null,
+    })),
+  finishSkillOperation: (skillId) =>
+    set((state) => {
+      const nextOperations = { ...state.skillOperations };
+      delete nextOperations[skillId];
+      return {
+        skillOperations: nextOperations,
+      };
+    }),
+  setSkillOperationError: (skillOperationError) =>
+    set({
+      skillOperationError,
     }),
   setChatSessionId: (sessionId) =>
     set({

@@ -12,7 +12,7 @@ export default defineConfig({
     css: true,
   },
   entry: {
-    main: "./src/main.tsx",
+    main: "./src/index.tsx",
   },
   output: {
     path: path.resolve(__dirname, "dist"),
@@ -23,6 +23,9 @@ export default defineConfig({
   },
   resolve: {
     extensions: [".tsx", ".ts", ".jsx", ".js"],
+    alias: {
+      "~": path.resolve(__dirname, "src"),
+    },
   },
   module: {
     rules: [
@@ -39,7 +42,16 @@ export default defineConfig({
         ],
       },
       {
+        test: /src[\\/](?!index\.css$).*\.css$/i,
+        type: "css/module",
+      },
+      {
+        test: /src[\\/]index\.css$/i,
+        type: "css",
+      },
+      {
         test: /\.css$/i,
+        exclude: /src[\\/].*\.css$/i,
         type: "css",
       },
     ],

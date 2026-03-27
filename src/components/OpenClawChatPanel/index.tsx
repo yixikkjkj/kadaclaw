@@ -1,7 +1,8 @@
-import { Alert, Avatar, Button, Card, Input, Space, Spin, Tag, Typography } from "antd";
+import { Alert, Avatar, Button, Card, Flex, Input, Spin, Tag, Typography } from "antd";
 import { useEffect, useRef, useState } from "react";
-import { getOpenClawAuthConfig, sendOpenClawMessage, type OpenClawAuthConfig } from "../lib/openclaw";
-import { useAppStore } from "../store/appStore";
+import { getOpenClawAuthConfig, sendOpenClawMessage, type OpenClawAuthConfig } from "~/api";
+import { useAppStore } from "~/store";
+import * as styles from "~/common/ui.css";
 
 const { Paragraph, Text, Title } = Typography;
 
@@ -87,33 +88,33 @@ export function OpenClawChatPanel() {
 
   return (
     <Card
-      className="panel-card chat-shell"
+      className={[styles.panelCard, styles.chatShell].join(" ")}
       title="和 OpenClaw 聊天"
       extra={
-        <Space size={10}>
+        <Flex gap={10}>
           <Tag color={runtimeStatus === "ready" ? "green" : "orange"}>
             {runtimeStatus === "ready" ? "Runtime 在线" : "等待连接"}
           </Tag>
           <Button onClick={resetChatSession}>新会话</Button>
-        </Space>
+        </Flex>
       }
     >
-      <div className="chat-panel">
-        <div className="chat-panel-head">
+      <div className={styles.chatPanel}>
+        <div className={styles.chatPanelHead}>
           <div>
             <Title level={4}>主会话窗口</Title>
             <Paragraph type="secondary">
               这里直接调用本地 OpenClaw agent，会话 ID 会持续复用，保持上下文连续。
             </Paragraph>
-            <Space size={[8, 8]} wrap>
+            <Flex gap={8} wrap>
               <Tag color="blue">{authConfig?.provider ?? "provider 未知"}</Tag>
               <Tag>{authConfig?.model ?? "模型未配置"}</Tag>
               <Tag color={authConfig?.apiKeyConfigured ? "green" : "orange"}>
                 {authConfig?.apiKeyConfigured ? "授权已配置" : "授权未配置"}
               </Tag>
-            </Space>
+            </Flex>
           </div>
-          <div className="chat-session-chip">
+          <div className={styles.chatSessionChip}>
             <Text type="secondary">Session</Text>
             <strong>{chatSessionId}</strong>
           </div>
@@ -121,7 +122,7 @@ export function OpenClawChatPanel() {
 
         {authConfig && !authConfig.apiKeyConfigured ? (
           <Alert
-            className="chat-auth-alert"
+            className={styles.chatAuthAlert}
             type="warning"
             showIcon
             message="当前模型授权尚未配置"
@@ -129,14 +130,24 @@ export function OpenClawChatPanel() {
           />
         ) : null}
 
-        <div className="chat-message-list" ref={scrollRef}>
+        <div className={styles.chatMessageList} ref={scrollRef}>
           {chatMessages.map((message) => (
-            <div key={message.id} className={`chat-row ${message.role}`}>
-              <Avatar className="chat-avatar">
+            <div
+              key={message.id}
+              className={[
+                styles.chatRow,
+                message.role === "user"
+                  ? styles.userRow
+                  : message.role === "assistant"
+                    ? styles.assistantRow
+                    : styles.systemRow,
+              ].join(" ")}
+            >
+              <Avatar className={styles.chatAvatar}>
                 {message.role === "user" ? "你" : message.role === "assistant" ? "OC" : "!"}
               </Avatar>
-              <div className="chat-bubble">
-                <div className="chat-meta">
+              <div className={styles.chatBubble}>
+                <div className={styles.chatMeta}>
                   <Text type="secondary">
                     {message.role === "user"
                       ? "你"
@@ -145,19 +156,19 @@ export function OpenClawChatPanel() {
                         : "系统"}
                   </Text>
                 </div>
-                <Paragraph className="chat-content">{message.content}</Paragraph>
+                <Paragraph className={styles.chatContent}>{message.content}</Paragraph>
               </div>
             </div>
           ))}
 
           {sending ? (
-            <div className="chat-row assistant">
-              <Avatar className="chat-avatar">OC</Avatar>
-              <div className="chat-bubble chat-bubble-loading">
-                <Space>
+            <div className={[styles.chatRow, styles.assistantRow].join(" ")}>
+              <Avatar className={styles.chatAvatar}>OC</Avatar>
+              <div className={[styles.chatBubble, styles.chatBubbleLoading].join(" ")}>
+                <Flex align="center" gap={8}>
                   <Spin size="small" />
                   <Text>OpenClaw 正在思考并生成回复</Text>
-                </Space>
+                </Flex>
               </div>
             </div>
           ) : null}
@@ -165,7 +176,7 @@ export function OpenClawChatPanel() {
 
         {error ? (
           <Alert
-            className="chat-alert"
+            className={styles.chatAlert}
             type="error"
             showIcon
             message="当前消息未成功送达 OpenClaw"
@@ -173,7 +184,7 @@ export function OpenClawChatPanel() {
           />
         ) : null}
 
-        <div className="chat-composer">
+        <div className={styles.chatComposer}>
           <Input.TextArea
             value={input}
             onChange={(event) => setInput(event.target.value)}
@@ -187,7 +198,7 @@ export function OpenClawChatPanel() {
             autoSize={{ minRows: 3, maxRows: 6 }}
             disabled={sending}
           />
-          <div className="chat-composer-footer">
+          <div className={styles.chatComposerFooter}>
             <Text type="secondary">{runtimeMessage}</Text>
             <Button type="primary" size="large" onClick={() => void handleSend()} loading={sending}>
               发送给 OpenClaw

@@ -1,4 +1,5 @@
-import { Card, Progress, Space, Spin, Typography } from "antd";
+import { Card, Flex, Progress, Spin, Typography } from "antd";
+import * as styles from "~/common/ui.css";
 
 const { Text, Title } = Typography;
 
@@ -12,12 +13,9 @@ export function BootstrappingScreen({
   runtimeStatus,
 }: BootstrappingScreenProps) {
   return (
-    <Card className="hero-card bootstrap-card">
-      <Space direction="vertical" size={16} style={{ display: "flex" }}>
+    <Card className={[styles.heroCard, styles.bootstrapCard].join(" ")}>
+      <Flex vertical gap={16}>
         <Spin />
-        <Title level={3} style={{ margin: 0 }}>
-          正在准备内置 OpenClaw
-        </Title>
         <Text type="secondary">{runtimeMessage}</Text>
         <Progress
           percent={runtimeStatus === "ready" ? 100 : runtimeStatus === "checking" ? 68 : 32}
@@ -25,7 +23,7 @@ export function BootstrappingScreen({
           strokeColor="#0f7b6c"
           trailColor="#d9e6df"
         />
-      </Space>
+      </Flex>
     </Card>
   );
 }

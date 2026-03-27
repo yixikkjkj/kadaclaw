@@ -12,22 +12,24 @@
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
     "tauri:build--no-sign": "npm run tauri:build -- --no-sign",
-    "check": "tsc --noEmit && cargo check --manifest-path src-tauri/Cargo.toml"
+    "check": "tsc --noEmit && cargo check --manifest-path src-tauri/Cargo.toml",
+    "check:smoke": "bash scripts/smoke_check.sh"
   },
   "dependencies": {
-    "@ant-design/icons": "^6.0.0",
+    "@ant-design/icons": "^6.1.1",
     "@tauri-apps/api": "^2.3.0",
-    "antd": "^5.27.3",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
+    "antd": "^6.3.4",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "react-router": "^7.13.2",
     "zustand": "^5.0.3"
   },
   "devDependencies": {
     "@rspack/cli": "^1.2.8",
     "@rspack/core": "^1.2.8",
     "@tauri-apps/cli": "^2.3.1",
-    "@types/react": "^18.3.20",
-    "@types/react-dom": "^18.3.6",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
     "ts-loader": "^9.5.2",
     "typescript": "^5.8.2",
     "webpack-dev-server": "^5.2.0"

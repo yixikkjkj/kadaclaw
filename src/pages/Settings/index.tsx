@@ -1,23 +1,24 @@
-import { Alert, Badge, Button, Card, Col, Descriptions, Form, Input, message, Row, Select, Space, Statistic, Switch, Table, Tag, Typography } from "antd";
+import { Alert, Badge, Button, Card, Col, Descriptions, Flex, Form, Input, message, Row, Select, Statistic, Switch, Table, Tag, Typography } from "antd";
 import { useEffect, useState } from "react";
 import type { TableColumnsType } from "antd";
-import { marketSources } from "../data/mock";
+import { marketSources } from "~/common/constants";
 import {
   getOpenClawAuthConfig,
   getOpenClawConfig,
-  getOpenClawRuntimeInfo,
   installBundledOpenClawRuntime,
   launchOpenClawRuntime,
-  probeOpenClawRuntime,
+  runOpenClawSelfCheck,
   saveOpenClawAuthConfig,
   saveOpenClawConfig,
   type OpenClawAuthConfig,
   type OpenClawConfig,
+  type OpenClawSelfCheckResult,
   type OpenClawStatus,
   type RuntimeInfoResult,
   upgradeBundledOpenClawRuntime,
-} from "../lib/openclaw";
-import { useAppStore } from "../store/appStore";
+} from "~/api";
+import { useAppStore } from "~/store";
+import * as styles from "~/common/ui.css";
 
 const { Paragraph, Text, Title } = Typography;
 
@@ -39,19 +40,93 @@ const providerOptions = [
   { label: "Google", value: "google", env: "GEMINI_API_KEY", model: "google/gemini-2.5-pro" },
 ];
 
+function isWindowsHost() {
+  return typeof navigator !== "undefined" && /windows/i.test(navigator.userAgent);
+}
+
+function getHostPlatformInfo() {
+  if (typeof navigator === "undefined") {
+    return {
+      label: "未知环境",
+      installMode: "应用内托管",
+      recommendation: "按当前平台默认方式安装",
+      note: "当前无法从浏览器环境识别宿主系统。",
+    };
+  }
+
+  const userAgent = navigator.userAgent.toLowerCase();
+  if (userAgent.includes("windows")) {
+    return {
+      label: "Windows",
+      installMode: "PowerShell + app-local wrapper",
+      recommendation: "兼容支持，优先推荐 WSL2",
+      note: "如果遇到 PowerShell、npm、PATH 或 runtime 启动异常，优先改用 WSL2。",
+    };
+  }
+  if (userAgent.includes("mac os")) {
+    return {
+      label: "macOS",
+      installMode: "官方 shell 安装器",
+      recommendation: "推荐直接使用内置安装",
+      note: "当前桌面端对 macOS 路径和内置 runtime 目录的适配最完整。",
+    };
+  }
+  if (userAgent.includes("linux")) {
+    return {
+      label: "Linux",
+      installMode: "官方 shell 安装器",
+      recommendation: "推荐直接使用内置安装",
+      note: "若发行版限制较多，请确认 shell、网络和执行权限可用。",
+    };
+  }
+
+  return {
+    label: "未知环境",
+    installMode: "应用内托管",
+    recommendation: "按当前平台默认方式安装",
+    note: "当前无法可靠识别宿主系统，安装前请确认 shell 或 PowerShell 环境可用。",
+  };
+}
+
+type SelfCheckState = "pass" | "warn" | "fail";
+
+function getSelfCheckBadge(state: SelfCheckState) {
+  switch (state) {
+    case "pass":
+      return <Badge status="success" text="通过" />;
+    case "warn":
+      return <Badge status="processing" text="待确认" />;
+    case "fail":
+    default:
+      return <Badge status="error" text="失败" />;
+  }
+}
+
+function formatCheckTime(value?: number | null) {
+  if (!value) {
+    return "尚未执行";
+  }
+  return new Date(value).toLocaleString("zh-CN");
+}
+
 export function SettingsPage() {
   const [form] = Form.useForm<OpenClawFormValues>();
   const [authForm] = Form.useForm<OpenClawAuthFormValues>();
   const [runtimeStatus, setRuntimeStatus] = useState<OpenClawStatus | null>(null);
   const [runtimeInfo, setRuntimeInfo] = useState<RuntimeInfoResult | null>(null);
+  const [selfCheckResult, setSelfCheckResult] = useState<OpenClawSelfCheckResult | null>(null);
   const [authConfig, setAuthConfig] = useState<OpenClawAuthConfig | null>(null);
   const [loading, setLoading] = useState(false);
   const setRuntimeState = useAppStore((state) => state.setRuntimeState);
+  const windowsHost = isWindowsHost();
+  const platformInfo = getHostPlatformInfo();
 
   const refreshRuntimeInfo = async () => {
     try {
-      const info = await getOpenClawRuntimeInfo();
-      setRuntimeInfo(info);
+      const result = await runOpenClawSelfCheck();
+      setSelfCheckResult(result);
+      setRuntimeInfo(result.runtimeInfo);
+      setRuntimeStatus(result.runtimeStatus);
     } catch (error) {
       message.error(`读取 Runtime 信息失败: ${String(error)}`);
     }
@@ -83,18 +158,34 @@ export function SettingsPage() {
     })();
   }, [authForm, form]);
 
-  const runProbe = async () => {
-    setLoading(true);
-    setRuntimeState("checking", "正在检测 OpenClaw runtime");
+  const performSelfCheck = async (options?: { showSuccessMessage?: boolean }) => {
+    const showSuccessMessage = options?.showSuccessMessage ?? true;
     try {
-      const status = await probeOpenClawRuntime();
-      setRuntimeStatus(status);
-      setRuntimeState(status.reachable ? "ready" : "error", status.message);
-      message.success("OpenClaw runtime 检测已完成");
+      setRuntimeState("checking", "正在检测 OpenClaw runtime");
+      const result = await runOpenClawSelfCheck();
+      setSelfCheckResult(result);
+      setRuntimeInfo(result.runtimeInfo);
+      setRuntimeStatus(result.runtimeStatus);
+      setRuntimeState(
+        result.runtimeStatus.reachable ? "ready" : "error",
+        result.runtimeStatus.message,
+      );
+      if (showSuccessMessage) {
+        message.success("OpenClaw 自检已完成");
+      }
     } catch (error) {
       const text = `检测失败: ${String(error)}`;
       setRuntimeState("error", text);
-      message.error(text);
+      if (showSuccessMessage) {
+        message.error(text);
+      }
+    }
+  };
+
+  const runProbe = async () => {
+    setLoading(true);
+    try {
+      await performSelfCheck();
     } finally {
       setLoading(false);
     }
@@ -117,8 +208,7 @@ export function SettingsPage() {
         args: saved.args.join(" "),
       });
       message.success("OpenClaw 配置已保存");
-      await refreshRuntimeInfo();
-      await runProbe();
+      await performSelfCheck();
     } catch (error) {
       if (error instanceof Error) {
         message.error(error.message);
@@ -137,9 +227,9 @@ export function SettingsPage() {
         ...result.config,
         args: result.config.args.join(" "),
       });
-      await refreshRuntimeInfo();
       setRuntimeStatus(result.status);
       setRuntimeState("checking", result.status.message);
+      await performSelfCheck({ showSuccessMessage: false });
       message.success("内置 OpenClaw 已安装到应用目录");
     } catch (error) {
       const text = `安装失败: ${String(error)}`;
@@ -159,10 +249,9 @@ export function SettingsPage() {
         ...result.config,
         args: result.config.args.join(" "),
       });
-      await refreshRuntimeInfo();
       setRuntimeStatus(result.status);
-      setRuntimeState("checking", "内置 OpenClaw 已升级，请重新启动 runtime");
-      message.success("内置 OpenClaw 已升级");
+      await performSelfCheck({ showSuccessMessage: false });
+      message.success("内置 OpenClaw 已升级并完成自检");
     } catch (error) {
       const text = `升级失败: ${String(error)}`;
       setRuntimeState("error", text);
@@ -187,7 +276,8 @@ export function SettingsPage() {
       const status = await launchOpenClawRuntime();
       setRuntimeStatus(status);
       setRuntimeState("checking", status.message);
-      message.success("已发起 OpenClaw runtime 启动");
+      await performSelfCheck({ showSuccessMessage: false });
+      message.success("已启动 OpenClaw runtime 并完成自检");
     } catch (error) {
       message.error(`启动失败: ${String(error)}`);
       setRuntimeState("error", `启动失败: ${String(error)}`);
@@ -210,21 +300,23 @@ export function SettingsPage() {
     },
   ];
 
+  const selfChecks = selfCheckResult?.items ?? [];
+
   return (
-    <Space direction="vertical" size={20} style={{ display: "flex" }}>
-      <Card className="hero-card settings-hero">
-        <div className="settings-hero-grid">
+    <Flex vertical gap={20}>
+      <Card className={[styles.heroCard, styles.settingsHero].join(" ")}>
+        <div className={styles.settingsHeroGrid}>
           <div>
-            <Tag color="green" className="hero-tag">
+            <Tag color="green" className={styles.heroTag}>
               Runtime Hub
             </Tag>
-            <Title level={1} className="workspace-title">
+            <Title level={1} className={styles.workspaceTitle}>
               内置 OpenClaw 管理中心
             </Title>
-            <Paragraph className="hero-copy">
+            <Paragraph className={styles.heroCopy}>
               安装、升级、探测和高级配置都集中在这里。目标不是暴露更多复杂度，而是把 OpenClaw 的运行时管理真正收进 Kadaclaw 客户端。
             </Paragraph>
-            <Space wrap style={{ marginBottom: 8 }}>
+            <Flex gap={8} wrap style={{ marginBottom: 8 }}>
               <Button type="primary" loading={loading} onClick={() => void installBundledRuntime()}>
                 一键安装内置 OpenClaw
               </Button>
@@ -237,13 +329,13 @@ export function SettingsPage() {
               <Button loading={loading} onClick={() => void runProbe()}>
                 检测当前 Runtime
               </Button>
-            </Space>
+            </Flex>
           </div>
           <div>
-            <Card className="spotlight-panel runtime-panel">
+            <Card className={[styles.spotlightPanel, styles.runtimePanel].join(" ")}>
               <Text type="secondary">Runtime 摘要</Text>
               <Title level={3}>当前环境</Title>
-              <div className="runtime-meta-grid">
+              <div className={styles.runtimeMetaGrid}>
                 <div>
                   <Text type="secondary">安装状态</Text>
                   <strong>{runtimeInfo?.installed ? "已安装" : "未安装"}</strong>
@@ -258,25 +350,68 @@ export function SettingsPage() {
         </div>
       </Card>
 
+      {windowsHost ? (
+        <Alert
+          type="info"
+          showIcon
+          message="Windows 运行建议"
+          description="Kadaclaw 现在支持 Windows 下安装内置 OpenClaw，但如果你遇到 PowerShell 安装失败、命令找不到或 runtime 无法启动，优先考虑使用 WSL2 方案。"
+        />
+      ) : null}
+
+      <Card className={styles.panelCard} title="平台状态">
+        <Descriptions column={1} size="small">
+          <Descriptions.Item label="当前系统">{platformInfo.label}</Descriptions.Item>
+          <Descriptions.Item label="安装模式">{platformInfo.installMode}</Descriptions.Item>
+          <Descriptions.Item label="推荐方案">{platformInfo.recommendation}</Descriptions.Item>
+          <Descriptions.Item label="说明">{platformInfo.note}</Descriptions.Item>
+        </Descriptions>
+      </Card>
+
       <Row gutter={[16, 16]}>
         <Col xs={24} md={8}>
-          <Card className="metric-card">
+          <Card className={styles.metricCard}>
             <Statistic title="Runtime 安装" value={runtimeInfo?.installed ? "已安装" : "未安装"} />
           </Card>
         </Col>
         <Col xs={24} md={8}>
-          <Card className="metric-card">
+          <Card className={styles.metricCard}>
             <Statistic title="内置模式" value={runtimeInfo?.bundled ? "已托管" : "外部模式"} />
           </Card>
         </Col>
         <Col xs={24} md={8}>
-          <Card className="metric-card">
+          <Card className={styles.metricCard}>
             <Statistic title="技能目录" value={runtimeInfo?.skillsDir ? "已就位" : "未准备"} />
           </Card>
         </Col>
       </Row>
 
-      <Card className="panel-card" title="OpenClaw Runtime 配置">
+      <Card
+        className={styles.panelCard}
+        title="安装后自检"
+        extra={
+          <Flex align="center" gap={12}>
+            <Text type="secondary">上次检查：{formatCheckTime(selfCheckResult?.checkedAt)}</Text>
+            <Button size="small" loading={loading} onClick={() => void runProbe()}>
+              重新执行自检
+            </Button>
+          </Flex>
+        }
+      >
+        <Descriptions column={1} size="small">
+          {selfChecks.map((item) => (
+            <Descriptions.Item key={item.key} label={item.label}>
+              <Flex vertical gap={4}>
+                {getSelfCheckBadge(item.status)}
+                <Text type="secondary">{item.detail}</Text>
+                {item.suggestion ? <Text>{item.suggestion}</Text> : null}
+              </Flex>
+            </Descriptions.Item>
+          ))}
+        </Descriptions>
+      </Card>
+
+      <Card className={styles.panelCard} title="OpenClaw Runtime 配置">
         <Paragraph type="secondary">
           默认情况下 Kadaclaw 会托管内置 runtime。这里保留高级入口，方便你覆盖默认端口、模型和启动参数。
         </Paragraph>
@@ -324,19 +459,19 @@ export function SettingsPage() {
               </Form.Item>
             </Col>
           </Row>
-          <Space wrap>
+          <Flex gap={8} wrap>
             <Button type="primary" loading={loading} onClick={() => void saveConfig()}>
               保存并检测
             </Button>
             <Button loading={loading} onClick={() => void runProbe()}>
               只检测
             </Button>
-          </Space>
+          </Flex>
         </Form>
       </Card>
 
-      <Card className="panel-card" title="模型与授权">
-        <Space direction="vertical" size={16} style={{ display: "flex" }}>
+      <Card className={styles.panelCard} title="模型与授权">
+        <Flex vertical gap={16}>
           <Alert
             type={authConfig?.apiKeyConfigured ? "success" : "warning"}
             showIcon
@@ -380,7 +515,7 @@ export function SettingsPage() {
                 </Form.Item>
               </Col>
             </Row>
-            <Space wrap>
+            <Flex gap={8} wrap>
               <Button
                 type="primary"
                 loading={loading}
@@ -408,7 +543,7 @@ export function SettingsPage() {
               >
                 保存模型与授权
               </Button>
-            </Space>
+            </Flex>
           </Form>
 
           <Descriptions column={1} size="small">
@@ -419,13 +554,13 @@ export function SettingsPage() {
               {authConfig?.apiKeyConfigured ? "已配置" : "未配置"}
             </Descriptions.Item>
           </Descriptions>
-        </Space>
+        </Flex>
       </Card>
 
       <Row gutter={[16, 16]}>
         {runtimeStatus ? (
           <Col xs={24} xl={12}>
-            <Card className="panel-card" title="OpenClaw 检测结果">
+            <Card className={styles.panelCard} title="OpenClaw 检测结果">
               <Descriptions column={1} size="small">
                 <Descriptions.Item label="Endpoint">{runtimeStatus.endpoint}</Descriptions.Item>
                 <Descriptions.Item label="消息">{runtimeStatus.message}</Descriptions.Item>
@@ -445,9 +580,12 @@ export function SettingsPage() {
 
         {runtimeInfo ? (
           <Col xs={24} xl={12}>
-            <Card className="panel-card" title="OpenClaw Runtime 信息">
+            <Card className={styles.panelCard} title="OpenClaw Runtime 信息">
               <Descriptions column={1} size="small">
                 <Descriptions.Item label="版本">{runtimeInfo.version}</Descriptions.Item>
+                <Descriptions.Item label="版本读取错误">
+                  {runtimeInfo.versionError ?? "--"}
+                </Descriptions.Item>
                 <Descriptions.Item label="命令路径">{runtimeInfo.commandPath}</Descriptions.Item>
                 <Descriptions.Item label="安装目录">{runtimeInfo.installDir}</Descriptions.Item>
                 <Descriptions.Item label="技能目录">{runtimeInfo.skillsDir}</Descriptions.Item>
@@ -457,20 +595,20 @@ export function SettingsPage() {
         ) : null}
       </Row>
 
-      <Card className="panel-card" title="技能市场源">
+      <Card className={styles.panelCard} title="技能市场源">
         <Table rowKey="id" columns={marketColumns} dataSource={marketSources} pagination={false} />
       </Card>
 
-      <Card className="panel-card" title="产品接入说明">
+      <Card className={styles.panelCard} title="产品接入说明">
         <Descriptions column={1} size="small">
           <Descriptions.Item label="OpenClaw 接入">
             通过桌面端 Provider 层适配对话、技能执行和工具调用。
           </Descriptions.Item>
           <Descriptions.Item label="技能目录打通">
-            Kadaclaw 已经为内置 OpenClaw 固定私有 skills 目录，下一步可以把市场安装直接写入这里。
+            Kadaclaw 已经为内置 OpenClaw 固定私有 skills 目录，市场安装现在会把技能清单直接写入这里。
           </Descriptions.Item>
         </Descriptions>
       </Card>
-    </Space>
+    </Flex>
   );
 }

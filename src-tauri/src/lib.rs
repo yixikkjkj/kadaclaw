@@ -1,13 +1,20 @@
+use reqwest::header::{HeaderMap, RETRY_AFTER};
 use reqwest::StatusCode;
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 use std::env;
 use std::fs;
+use std::io::Cursor;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Manager};
+use zip::ZipArchive;
+
+const CLAWHUB_API_BASE: &str = "https://clawhub.ai/api/v1";
+const CLAWHUB_MAX_ATTEMPTS: usize = 3;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -56,9 +63,29 @@ struct RuntimeInfoResult {
     installed: bool,
     bundled: bool,
     version: String,
+    version_error: Option<String>,
     command_path: String,
     install_dir: String,
     skills_dir: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct OpenClawSelfCheckItem {
+    key: String,
+    label: String,
+    status: String,
+    detail: String,
+    suggestion: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct OpenClawSelfCheckResult {
+    runtime_info: RuntimeInfoResult,
+    runtime_status: OpenClawStatus,
+    checked_at: i64,
+    items: Vec<OpenClawSelfCheckItem>,
 }
 
 #[derive(Debug, Serialize)]
@@ -111,15 +138,24 @@ struct SkillManifest {
 struct InstallSkillPayload {
     id: String,
     name: String,
-    category: String,
     summary: String,
+    #[serde(default = "default_skill_category")]
+    category: String,
+    #[serde(default = "default_skill_author")]
     author: String,
+    version: Option<String>,
+    source_url: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 struct InstalledSkillRecord {
     id: String,
+    name: String,
+    category: String,
+    summary: String,
+    author: String,
+    version: String,
     manifest_path: String,
     directory: String,
 }
@@ -140,6 +176,119 @@ struct OpenClawSkillEntry {
     blocked_by_allowlist: bool,
     source: String,
     bundled: bool,
+}
+
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct MarketSkillSummary {
+    id: String,
+    name: String,
+    summary: String,
+    version: String,
+    updated_at: Option<i64>,
+    installs: Option<u64>,
+    downloads: Option<u64>,
+    stars: Option<u64>,
+    platform_targets: Vec<String>,
+    system_targets: Vec<String>,
+    source_url: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct MarketSkillDetail {
+    id: String,
+    name: String,
+    summary: String,
+    version: String,
+    updated_at: Option<i64>,
+    author: String,
+    changelog: String,
+    installs: Option<u64>,
+    downloads: Option<u64>,
+    stars: Option<u64>,
+    platform_targets: Vec<String>,
+    system_targets: Vec<String>,
+    source_url: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ClawHubListResponse {
+    #[serde(default)]
+    items: Vec<ClawHubSkillListItem>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ClawHubSearchResponse {
+    #[serde(default)]
+    results: Vec<ClawHubSearchItem>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ClawHubSkillDetailResponse {
+    skill: ClawHubSkillListItem,
+    latest_version: Option<ClawHubLatestVersion>,
+    metadata: Option<ClawHubMetadata>,
+    owner: Option<ClawHubOwner>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ClawHubSkillListItem {
+    slug: String,
+    display_name: String,
+    summary: String,
+    #[serde(default)]
+    tags: Map<String, Value>,
+    #[serde(default)]
+    stats: Value,
+    updated_at: Option<i64>,
+    latest_version: Option<ClawHubLatestVersion>,
+    metadata: Option<ClawHubMetadata>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ClawHubSearchItem {
+    slug: String,
+    display_name: String,
+    summary: String,
+    version: Option<String>,
+    updated_at: Option<i64>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct ClawHubLatestVersion {
+    version: String,
+    created_at: Option<i64>,
+    changelog: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct ClawHubMetadata {
+    os: Option<Vec<String>>,
+    systems: Option<Vec<String>>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ClawHubOwner {
+    handle: Option<String>,
+    display_name: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ManagedSkillOrigin {
+    slug: String,
+    version: String,
+    source_url: String,
+    installed_via: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -177,6 +326,18 @@ impl Default for OpenClawConfig {
             working_directory: String::new(),
         }
     }
+}
+
+fn default_skill_category() -> String {
+    "ClawHub".to_string()
+}
+
+fn default_skill_author() -> String {
+    "ClawHub".to_string()
+}
+
+fn default_skill_version() -> String {
+    "latest".to_string()
 }
 
 fn config_path(app: &AppHandle) -> Result<PathBuf, String> {
@@ -407,6 +568,7 @@ fn bundled_prefix_from_command(command: &str) -> Result<PathBuf, String> {
 
 fn ensure_bundled_layout(prefix: &Path) -> Result<(), String> {
     let dirs = [
+        prefix.join("bin"),
         prefix.join("state"),
         prefix.join("config"),
         bundled_skills_dir(prefix),
@@ -633,6 +795,457 @@ fn skill_manifest_path(app: &AppHandle, skill_id: &str) -> Result<PathBuf, Strin
     Ok(skills_dir.join(skill_dir_name(skill_id)).join("skill.json"))
 }
 
+fn managed_origin_path(target_dir: &Path) -> PathBuf {
+    target_dir.join(".clawhub").join("origin.json")
+}
+
+fn clawhub_source_url(skill_id: &str) -> String {
+    format!("https://clawhub.ai/skills/{skill_id}")
+}
+
+fn temp_install_dir(skill_id: &str) -> PathBuf {
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_nanos())
+        .unwrap_or(0);
+    env::temp_dir().join(format!(
+        "kadaclaw-skill-{}-{}",
+        skill_dir_name(skill_id),
+        nanos
+    ))
+}
+
+fn has_skill_markdown(path: &Path) -> bool {
+    path.join("SKILL.md").exists() || path.join("skill.md").exists()
+}
+
+fn find_skill_root(path: &Path) -> Option<PathBuf> {
+    if has_skill_markdown(path) {
+        return Some(path.to_path_buf());
+    }
+
+    let entries = fs::read_dir(path).ok()?;
+    for entry in entries {
+        let entry = entry.ok()?;
+        let child_path = entry.path();
+        if child_path.is_dir() {
+            if let Some(root) = find_skill_root(&child_path) {
+                return Some(root);
+            }
+        }
+    }
+
+    None
+}
+
+fn ensure_parent_dir(path: &Path) -> Result<(), String> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|error| format!("无法创建目录 {}: {error}", parent.display()))?;
+    }
+    Ok(())
+}
+
+fn copy_dir_contents(from: &Path, to: &Path) -> Result<(), String> {
+    fs::create_dir_all(to).map_err(|error| format!("无法创建目录 {}: {error}", to.display()))?;
+
+    let entries = fs::read_dir(from)
+        .map_err(|error| format!("无法读取目录 {}: {error}", from.display()))?;
+    for entry in entries {
+        let entry = entry.map_err(|error| format!("读取目录条目失败: {error}"))?;
+        let source_path = entry.path();
+        let target_path = to.join(entry.file_name());
+        if source_path.is_dir() {
+            copy_dir_contents(&source_path, &target_path)?;
+        } else {
+            ensure_parent_dir(&target_path)?;
+            fs::copy(&source_path, &target_path).map_err(|error| {
+                format!(
+                    "无法复制文件 {} -> {}: {error}",
+                    source_path.display(),
+                    target_path.display()
+                )
+            })?;
+        }
+    }
+
+    Ok(())
+}
+
+fn extract_clawhub_zip(skill_id: &str, archive_bytes: &[u8], destination: &Path) -> Result<(), String> {
+    let reader = Cursor::new(archive_bytes);
+    let mut archive =
+        ZipArchive::new(reader).map_err(|error| format!("无法读取技能压缩包: {error}"))?;
+
+    fs::create_dir_all(destination)
+        .map_err(|error| format!("无法创建临时目录 {}: {error}", destination.display()))?;
+
+    for index in 0..archive.len() {
+        let mut file = archive
+            .by_index(index)
+            .map_err(|error| format!("无法读取压缩包条目 {index}: {error}"))?;
+        let enclosed_path = file
+            .enclosed_name()
+            .ok_or_else(|| format!("技能 {skill_id} 压缩包包含非法路径"))?
+            .to_path_buf();
+        let output_path = destination.join(enclosed_path);
+
+        if file.is_dir() {
+            fs::create_dir_all(&output_path)
+                .map_err(|error| format!("无法创建目录 {}: {error}", output_path.display()))?;
+            continue;
+        }
+
+        ensure_parent_dir(&output_path)?;
+        let mut output = fs::File::create(&output_path)
+            .map_err(|error| format!("无法创建文件 {}: {error}", output_path.display()))?;
+        std::io::copy(&mut file, &mut output)
+            .map_err(|error| format!("无法写入文件 {}: {error}", output_path.display()))?;
+    }
+
+    Ok(())
+}
+
+fn parse_marker_line(output: &str, marker: &str) -> Option<String> {
+    output.lines().find_map(|line| {
+        line.trim()
+            .strip_prefix(marker)
+            .map(|value| value.trim().to_string())
+    })
+}
+
+fn write_windows_command_shim(wrapper_path: &Path, target_command: &str) -> Result<(), String> {
+    ensure_parent_dir(wrapper_path)?;
+    let escaped_target = target_command.replace('"', "\"\"");
+    let body = format!("@echo off\r\nsetlocal\r\ncall \"{escaped_target}\" %*\r\n");
+    fs::write(wrapper_path, body)
+        .map_err(|error| format!("无法写入 Windows OpenClaw 启动包装器 {}: {error}", wrapper_path.display()))
+}
+
+fn validate_bundled_command(command_path: &Path) -> Result<(), String> {
+    if !command_path.exists() {
+        return Err(format!(
+            "OpenClaw 安装已完成，但命令文件不存在: {}",
+            command_path.display()
+        ));
+    }
+
+    let command = command_path.to_string_lossy().to_string();
+    read_openclaw_version(&command).map(|_| ())
+}
+
+fn skills_dir_writable(skills_dir: &Path) -> Result<(), String> {
+    let marker_path = skills_dir.join(".kadaclaw-write-test");
+    fs::write(&marker_path, "ok")
+        .map_err(|error| format!("技能目录不可写: {error}"))?;
+    fs::remove_file(&marker_path)
+        .map_err(|error| format!("技能目录写入成功，但清理测试文件失败: {error}"))?;
+    Ok(())
+}
+
+fn classify_windows_install_failure(stderr: &str, stdout: &str) -> String {
+    let combined = format!("{stderr}\n{stdout}");
+    let normalized = combined.to_lowercase();
+    let detail = combined.trim();
+
+    if normalized.contains("failed to download")
+        || normalized.contains("invoke-webrequest")
+        || normalized.contains("could not resolve")
+        || normalized.contains("name or service not known")
+    {
+        return "Windows 安装失败：无法下载 OpenClaw 官方安装脚本，请检查网络、代理或防火墙设置。"
+            .to_string();
+    }
+
+    if normalized.contains("powershell is not recognized")
+        || normalized.contains("无法执行 windows openclaw 安装脚本")
+    {
+        return "Windows 安装失败：无法调用 PowerShell，请确认系统已启用 PowerShell 并允许当前应用执行它。"
+            .to_string();
+    }
+
+    if normalized.contains("npm")
+        && (normalized.contains("not recognized")
+            || normalized.contains("commandnotfoundexception")
+            || normalized.contains("无法将"))
+    {
+        return "Windows 安装失败：系统里没有可用的 npm，官方安装器无法继续。请先安装 Node.js/npm，或优先改用 WSL2。"
+            .to_string();
+    }
+
+    if normalized.contains("未能定位 openclaw 命令")
+        || normalized.contains("无法解析 openclaw 命令路径")
+    {
+        return "Windows 安装失败：官方脚本已执行，但 Kadaclaw 没有找到可用的 openclaw 命令。请检查 PATH / npm 全局目录，或优先改用 WSL2。"
+            .to_string();
+    }
+
+    if normalized.contains("executionpolicy")
+        || normalized.contains("running scripts is disabled")
+    {
+        return "Windows 安装失败：PowerShell 执行策略阻止了安装脚本运行，请放宽当前用户的执行策略或改用 WSL2。"
+            .to_string();
+    }
+
+    if detail.is_empty() {
+        "Windows 安装失败：官方安装器没有返回可读错误，请优先尝试 WSL2。".to_string()
+    } else {
+        format!("Windows 安装失败：{detail}")
+    }
+}
+
+fn numeric_field(value: &Value, keys: &[&str]) -> Option<u64> {
+    match value {
+        Value::Object(map) => {
+            for (entry_key, entry_value) in map {
+                if keys.iter().any(|key| entry_key.eq_ignore_ascii_case(key)) {
+                    if let Some(number) = entry_value.as_u64() {
+                        return Some(number);
+                    }
+                    if let Some(number) = entry_value.as_i64() {
+                        if number >= 0 {
+                            return Some(number as u64);
+                        }
+                    }
+                }
+                if let Some(number) = numeric_field(entry_value, keys) {
+                    return Some(number);
+                }
+            }
+            None
+        }
+        Value::Array(items) => items.iter().find_map(|item| numeric_field(item, keys)),
+        _ => None,
+    }
+}
+
+fn market_installs(stats: &Value) -> Option<u64> {
+    numeric_field(
+        stats,
+        &[
+            "installsCurrent",
+            "installsAllTime",
+            "installs",
+            "installCount",
+        ],
+    )
+}
+
+fn market_downloads(stats: &Value) -> Option<u64> {
+    numeric_field(stats, &["downloads", "downloadCount"])
+}
+
+fn market_stars(stats: &Value) -> Option<u64> {
+    numeric_field(stats, &["stars", "starCount"])
+}
+
+fn version_from_tags(tags: &Map<String, Value>) -> String {
+    tags.get("latest")
+        .and_then(Value::as_str)
+        .unwrap_or("latest")
+        .to_string()
+}
+
+fn market_platform_targets(metadata: Option<&ClawHubMetadata>) -> Vec<String> {
+    metadata
+        .and_then(|item| item.os.clone())
+        .unwrap_or_default()
+}
+
+fn market_system_targets(metadata: Option<&ClawHubMetadata>) -> Vec<String> {
+    metadata
+        .and_then(|item| item.systems.clone())
+        .unwrap_or_default()
+}
+
+fn map_clawhub_list_item(item: ClawHubSkillListItem) -> MarketSkillSummary {
+    let version = item
+        .latest_version
+        .as_ref()
+        .map(|entry| entry.version.clone())
+        .unwrap_or_else(|| version_from_tags(&item.tags));
+    let metadata = item.metadata.as_ref();
+
+    MarketSkillSummary {
+        id: item.slug.clone(),
+        name: item.display_name,
+        summary: item.summary,
+        version,
+        updated_at: item.updated_at,
+        installs: market_installs(&item.stats),
+        downloads: market_downloads(&item.stats),
+        stars: market_stars(&item.stats),
+        platform_targets: market_platform_targets(metadata),
+        system_targets: market_system_targets(metadata),
+        source_url: clawhub_source_url(&item.slug),
+    }
+}
+
+fn map_clawhub_search_item(item: ClawHubSearchItem) -> MarketSkillSummary {
+    MarketSkillSummary {
+        id: item.slug.clone(),
+        name: item.display_name,
+        summary: item.summary,
+        version: item.version.unwrap_or_else(|| "latest".to_string()),
+        updated_at: item.updated_at,
+        installs: None,
+        downloads: None,
+        stars: None,
+        platform_targets: Vec::new(),
+        system_targets: Vec::new(),
+        source_url: clawhub_source_url(&item.slug),
+    }
+}
+
+fn clawhub_retry_after(headers: &HeaderMap) -> Option<Duration> {
+    headers
+        .get(RETRY_AFTER)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.trim().parse::<u64>().ok())
+        .map(Duration::from_secs)
+}
+
+fn clawhub_retry_delay(attempt: usize, retry_after: Option<Duration>) -> Duration {
+    retry_after.unwrap_or_else(|| {
+        let millis = 400_u64.saturating_mul(2_u64.saturating_pow(attempt as u32));
+        Duration::from_millis(millis.min(4_000))
+    })
+}
+
+fn clawhub_should_retry_status(status: StatusCode) -> bool {
+    status == StatusCode::TOO_MANY_REQUESTS || status.is_server_error()
+}
+
+fn clawhub_status_error_message(
+    status: StatusCode,
+    detail: &str,
+    attempts: usize,
+    retry_after: Option<Duration>,
+) -> String {
+    match status {
+        StatusCode::TOO_MANY_REQUESTS => {
+            let waited = retry_after
+                .map(|duration| format!("，建议等待 {} 秒后重试", duration.as_secs().max(1)))
+                .unwrap_or_default();
+            format!("ClawHub 请求过于频繁，已重试 {attempts} 次后仍失败{waited}")
+        }
+        StatusCode::NOT_FOUND => "ClawHub 中没有找到对应技能".to_string(),
+        _ if detail.is_empty() => format!("ClawHub 返回状态 {}", status.as_u16()),
+        _ => format!("ClawHub 返回状态 {}: {detail}", status.as_u16()),
+    }
+}
+
+async fn send_clawhub_request(
+    path: &str,
+    query: &[(&str, String)],
+    timeout: Duration,
+) -> Result<reqwest::Response, String> {
+    let url = format!("{CLAWHUB_API_BASE}{path}");
+    let client = reqwest::Client::new();
+    let mut last_error = "无法连接 ClawHub".to_string();
+
+    for attempt in 0..CLAWHUB_MAX_ATTEMPTS {
+        match client.get(&url).query(query).timeout(timeout).send().await {
+            Ok(response) => {
+                let status = response.status();
+                if status.is_success() {
+                    return Ok(response);
+                }
+
+                let retry_after = clawhub_retry_after(response.headers());
+                let body = response.text().await.unwrap_or_default();
+                let detail = body.trim();
+                last_error =
+                    clawhub_status_error_message(status, detail, attempt + 1, retry_after);
+
+                if attempt + 1 < CLAWHUB_MAX_ATTEMPTS && clawhub_should_retry_status(status) {
+                    thread::sleep(clawhub_retry_delay(attempt, retry_after));
+                    continue;
+                }
+
+                return Err(last_error);
+            }
+            Err(error) => {
+                let retryable = error.is_connect() || error.is_timeout();
+                last_error = format!("无法连接 ClawHub: {error}");
+                if retryable && attempt + 1 < CLAWHUB_MAX_ATTEMPTS {
+                    thread::sleep(clawhub_retry_delay(attempt, None));
+                    continue;
+                }
+                return Err(last_error);
+            }
+        }
+    }
+
+    Err(last_error)
+}
+
+async fn fetch_clawhub_bytes(path: &str, query: &[(&str, String)]) -> Result<Vec<u8>, String> {
+    let response = send_clawhub_request(path, query, Duration::from_secs(20)).await?;
+
+    response
+        .bytes()
+        .await
+        .map(|bytes| bytes.to_vec())
+        .map_err(|error| format!("无法读取 ClawHub 压缩包: {error}"))
+}
+
+async fn fetch_clawhub_json<T>(path: &str, query: &[(&str, String)]) -> Result<T, String>
+where
+    T: DeserializeOwned,
+{
+    let response = send_clawhub_request(path, query, Duration::from_secs(10)).await?;
+
+    response
+        .json::<T>()
+        .await
+        .map_err(|error| format!("无法解析 ClawHub 响应: {error}"))
+}
+
+fn write_managed_skill_metadata(
+    target_dir: &Path,
+    payload: &InstallSkillPayload,
+    version: &str,
+) -> Result<(), String> {
+    let manifest = SkillManifest {
+        id: payload.id.clone(),
+        name: payload.name.clone(),
+        category: payload.category.clone(),
+        summary: payload.summary.clone(),
+        author: payload.author.clone(),
+        version: version.to_string(),
+        entry: if target_dir.join("SKILL.md").exists() {
+            "SKILL.md".to_string()
+        } else {
+            "skill.md".to_string()
+        },
+    };
+
+    let manifest_path = target_dir.join("skill.json");
+    let manifest_body = serde_json::to_string_pretty(&manifest)
+        .map_err(|error| format!("无法序列化技能清单: {error}"))?;
+    fs::write(&manifest_path, manifest_body)
+        .map_err(|error| format!("无法写入技能清单 {}: {error}", manifest_path.display()))?;
+
+    let origin = ManagedSkillOrigin {
+        slug: payload.id.clone(),
+        version: version.to_string(),
+        source_url: payload
+            .source_url
+            .clone()
+            .unwrap_or_else(|| clawhub_source_url(&payload.id)),
+        installed_via: "kadaclaw".to_string(),
+    };
+    let origin_path = managed_origin_path(target_dir);
+    ensure_parent_dir(&origin_path)?;
+    let origin_body = serde_json::to_string_pretty(&origin)
+        .map_err(|error| format!("无法序列化安装来源信息: {error}"))?;
+    fs::write(&origin_path, origin_body)
+        .map_err(|error| format!("无法写入安装来源信息 {}: {error}", origin_path.display()))?;
+
+    Ok(())
+}
+
 fn list_installed_skill_records(app: &AppHandle) -> Result<Vec<InstalledSkillRecord>, String> {
     let skills_dir = skills_dir_for_app(app)?;
     let mut records = Vec::new();
@@ -659,6 +1272,11 @@ fn list_installed_skill_records(app: &AppHandle) -> Result<Vec<InstalledSkillRec
 
         records.push(InstalledSkillRecord {
             id: manifest.id,
+            name: manifest.name,
+            category: manifest.category,
+            summary: manifest.summary,
+            author: manifest.author,
+            version: manifest.version,
             manifest_path: manifest_path.to_string_lossy().to_string(),
             directory: path.to_string_lossy().to_string(),
         });
@@ -666,17 +1284,6 @@ fn list_installed_skill_records(app: &AppHandle) -> Result<Vec<InstalledSkillRec
 
     records.sort_by(|a, b| a.id.cmp(&b.id));
     Ok(records)
-}
-
-fn build_skill_markdown(payload: &InstallSkillPayload) -> String {
-    format!(
-        "---\nname: {id}\ndescription: {summary}\nmetadata: {{\"openclaw\":{{\"skillKey\":\"{id}\",\"kadaclaw\":true,\"category\":\"{category}\",\"author\":\"{author}\"}}}}\n---\n\n# {name}\n\n{summary}\n\n## Usage\n\nUse this skill when the user's request matches the {category} capability described above.\n\n## Notes\n\n- Installed by Kadaclaw into the managed local skills directory.\n- This is a generated local skill scaffold intended to be expanded into a richer OpenClaw skill package.\n",
-        id = payload.id,
-        name = payload.name,
-        summary = payload.summary,
-        author = payload.author,
-        category = payload.category
-    )
 }
 
 fn run_command_with_timeout(
@@ -1008,10 +1615,64 @@ async fn install_bundled_openclaw_runtime(app: AppHandle) -> Result<InstallOpenC
     ensure_bundled_layout(&prefix)?;
     sync_openclaw_skills_extra_dir(&app)?;
     let prefix_string = prefix.to_string_lossy().to_string();
+    let wrapper_command_path = bundled_command_path(&prefix);
 
-    let install_result = tauri::async_runtime::spawn_blocking(move || -> Result<(), String> {
+    let install_result = tauri::async_runtime::spawn_blocking(move || -> Result<Option<String>, String> {
         if cfg!(target_os = "windows") {
-            return Err("当前内置安装器暂未实现 Windows 版本；macOS / Linux 可直接使用".to_string());
+            let script = r#"
+$ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'
+& ([scriptblock]::Create((Invoke-WebRequest -UseBasicParsing https://openclaw.ai/install.ps1))) -NoOnboard
+$npmPrefix = ''
+try {
+  $npmPrefix = (npm prefix -g | Select-Object -Last 1).Trim()
+} catch {}
+$candidates = @()
+if ($npmPrefix) {
+  $candidates += (Join-Path $npmPrefix 'openclaw.cmd')
+  $candidates += (Join-Path $npmPrefix 'openclaw')
+}
+if ($env:USERPROFILE) {
+  $candidates += (Join-Path $env:USERPROFILE '.local\bin\openclaw.cmd')
+  $candidates += (Join-Path $env:USERPROFILE '.local\bin\openclaw')
+}
+foreach ($candidate in $candidates) {
+  if ($candidate -and (Test-Path $candidate)) {
+    Write-Output ('__OPENCLAW_CMD__=' + $candidate)
+    exit 0
+  }
+}
+$cmd = Get-Command openclaw.cmd -ErrorAction SilentlyContinue
+if (-not $cmd) { $cmd = Get-Command openclaw -ErrorAction SilentlyContinue }
+if (-not $cmd) { throw 'OpenClaw 安装完成，但未能定位 openclaw 命令' }
+Write-Output ('__OPENCLAW_CMD__=' + $cmd.Source)
+"#;
+
+            let output = Command::new("powershell")
+                .arg("-NoProfile")
+                .arg("-ExecutionPolicy")
+                .arg("Bypass")
+                .arg("-Command")
+                .arg(script)
+                .output()
+                .map_err(|error| {
+                    classify_windows_install_failure(
+                        &format!("无法执行 Windows OpenClaw 安装脚本: {error}"),
+                        "",
+                    )
+                })?;
+
+            if !output.status.success() {
+                let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+                let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                return Err(classify_windows_install_failure(&stderr, &stdout));
+            }
+
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let command_path = parse_marker_line(&stdout, "__OPENCLAW_CMD__=")
+                .ok_or_else(|| "Windows 安装完成，但无法解析 openclaw 命令路径".to_string())?;
+
+            return Ok(Some(command_path));
         }
 
         let shell = env::var("SHELL").unwrap_or_else(|_| "/bin/bash".to_string());
@@ -1027,17 +1688,29 @@ async fn install_bundled_openclaw_runtime(app: AppHandle) -> Result<InstallOpenC
             .map_err(|error| format!("无法执行 OpenClaw 安装脚本: {error}"))?;
 
         if output.status.success() {
-            Ok(())
+            Ok(None)
         } else {
             Err(String::from_utf8_lossy(&output.stderr).trim().to_string())
         }
     })
     .await
     .map_err(|error| format!("安装任务失败: {error}"))?;
+    let install_result = install_result?;
 
-    install_result?;
+    if let Some(windows_command_path) = install_result {
+        if cfg!(target_os = "windows") {
+            write_windows_command_shim(&wrapper_command_path, &windows_command_path)?;
+        }
+    }
 
-    let command_path = bundled_command_path(&prefix);
+    let command_path = wrapper_command_path;
+    validate_bundled_command(&command_path).map_err(|error| {
+        if cfg!(target_os = "windows") {
+            format!("{error}。如果你在 Windows 原生环境里仍然失败，优先考虑使用 WSL2 安装和运行 OpenClaw。")
+        } else {
+            error
+        }
+    })?;
     let config = write_config(
         &app,
         SaveConfigPayload {
@@ -1097,21 +1770,148 @@ fn read_openclaw_version(command_path: &str) -> Result<String, String> {
     Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
 }
 
-#[tauri::command]
-fn get_openclaw_runtime_info(app: AppHandle) -> Result<RuntimeInfoResult, String> {
-    let config = read_config(&app)?;
+fn build_runtime_info(app: &AppHandle, config: &OpenClawConfig) -> Result<RuntimeInfoResult, String> {
     let install_dir = bundled_prefix(&app)?;
     ensure_bundled_layout(&install_dir)?;
     sync_openclaw_skills_extra_dir(&app)?;
     let skills_dir = bundled_skills_dir(&install_dir);
+    let version_result = read_openclaw_version(&config.command);
+    let (version, version_error) = match version_result {
+        Ok(version) => (version, None),
+        Err(error) => ("读取失败".to_string(), Some(error)),
+    };
 
     Ok(RuntimeInfoResult {
         installed: executable_exists(&config.command),
         bundled: is_bundled_command(&app, &config.command),
-        version: read_openclaw_version(&config.command)?,
-        command_path: config.command,
+        version,
+        version_error,
+        command_path: config.command.clone(),
         install_dir: install_dir.to_string_lossy().to_string(),
         skills_dir: skills_dir.to_string_lossy().to_string(),
+    })
+}
+
+#[tauri::command]
+fn get_openclaw_runtime_info(app: AppHandle) -> Result<RuntimeInfoResult, String> {
+    let config = read_config(&app)?;
+    build_runtime_info(&app, &config)
+}
+
+#[tauri::command]
+async fn run_openclaw_self_check(app: AppHandle) -> Result<OpenClawSelfCheckResult, String> {
+    let config = read_config(&app)?;
+    let runtime_info = build_runtime_info(&app, &config)?;
+    let runtime_status = probe_status(&app, &config).await;
+    let checked_at = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_millis() as i64)
+        .unwrap_or(0);
+    let working_directory_ok = if config.working_directory.trim().is_empty() {
+        None
+    } else {
+        Some(Path::new(&config.working_directory).exists())
+    };
+    let skills_dir_write_result = skills_dir_writable(Path::new(&runtime_info.skills_dir));
+    let skills_dir_write_ok = skills_dir_write_result.is_ok();
+    let skills_dir_write_detail = match &skills_dir_write_result {
+        Ok(_) => format!("技能目录可写：{}", runtime_info.skills_dir),
+        Err(error) => error.clone(),
+    };
+
+    let items = vec![
+        OpenClawSelfCheckItem {
+            key: "command".to_string(),
+            label: "CLI 命令路径".to_string(),
+            status: if runtime_info.installed { "pass" } else { "fail" }.to_string(),
+            detail: if runtime_info.installed {
+                runtime_info.command_path.clone()
+            } else {
+                format!("尚未找到可执行命令：{}", runtime_info.command_path)
+            },
+            suggestion: if runtime_info.installed {
+                None
+            } else {
+                Some("先执行内置安装，或检查设置页里的启动命令是否指向真实的 openclaw 可执行文件。".to_string())
+            },
+        },
+        OpenClawSelfCheckItem {
+            key: "version".to_string(),
+            label: "版本读取".to_string(),
+            status: if runtime_info.version_error.is_some() { "fail" } else { "pass" }.to_string(),
+            detail: runtime_info
+                .version_error
+                .clone()
+                .map(|error| format!("版本读取失败：{error}"))
+                .unwrap_or_else(|| runtime_info.version.clone()),
+            suggestion: runtime_info.version_error.as_ref().map(|_| {
+                "确认命令路径可执行，并手动运行 `openclaw --version`；Windows 下若仍失败，优先改用 WSL2。".to_string()
+            }),
+        },
+        OpenClawSelfCheckItem {
+            key: "bundled".to_string(),
+            label: "内置托管".to_string(),
+            status: if runtime_info.bundled { "pass" } else { "warn" }.to_string(),
+            detail: if runtime_info.bundled {
+                "当前正在使用 Kadaclaw 管理的内置 runtime".to_string()
+            } else {
+                "当前命令可能来自系统环境或外部自定义路径".to_string()
+            },
+            suggestion: if runtime_info.bundled {
+                None
+            } else {
+                Some("如果你希望 Kadaclaw 全权托管 runtime，重新执行“安装内置 OpenClaw”并保留默认命令路径。".to_string())
+            },
+        },
+        OpenClawSelfCheckItem {
+            key: "http".to_string(),
+            label: "HTTP 探测".to_string(),
+            status: if runtime_status.reachable { "pass" } else { "fail" }.to_string(),
+            detail: format!("{} ({})", runtime_status.message, runtime_status.endpoint),
+            suggestion: if runtime_status.reachable {
+                None
+            } else {
+                Some("先点击“启动已安装 Runtime”或检查端口/健康检查路径是否与当前 OpenClaw 配置一致。".to_string())
+            },
+        },
+        OpenClawSelfCheckItem {
+            key: "working-directory".to_string(),
+            label: "工作目录".to_string(),
+            status: match working_directory_ok {
+                Some(true) => "pass",
+                Some(false) => "fail",
+                None => "warn",
+            }
+            .to_string(),
+            detail: match working_directory_ok {
+                Some(true) => format!("工作目录存在：{}", config.working_directory),
+                Some(false) => format!("工作目录不存在：{}", config.working_directory),
+                None => "当前未设置 working directory，OpenClaw 将使用默认工作目录".to_string(),
+            },
+            suggestion: match working_directory_ok {
+                Some(false) => Some("把 working directory 改成真实存在的目录，或清空此项让 OpenClaw 使用默认工作目录。".to_string()),
+                None => Some("如果你需要固定相对路径资源，再显式设置 working directory；否则留空即可。".to_string()),
+                Some(true) => None,
+            },
+        },
+        OpenClawSelfCheckItem {
+            key: "skills-dir".to_string(),
+            label: "技能目录写入".to_string(),
+            status: if skills_dir_write_ok { "pass" } else { "fail" }.to_string(),
+            detail: skills_dir_write_detail,
+            suggestion: if skills_dir_write_ok {
+                None
+            } else {
+                Some("检查应用数据目录权限，确认 Kadaclaw 对 skills 目录有写入权限后再重试。".to_string())
+            },
+        },
+    ];
+
+    Ok(OpenClawSelfCheckResult {
+        runtime_info,
+        runtime_status,
+        checked_at,
+        items,
     })
 }
 
@@ -1141,37 +1941,136 @@ fn list_recognized_skills(app: AppHandle) -> Result<Vec<OpenClawSkillEntry>, Str
 }
 
 #[tauri::command]
-fn install_skill(app: AppHandle, payload: InstallSkillPayload) -> Result<InstalledSkillRecord, String> {
+async fn list_market_skills(
+    query: Option<String>,
+    limit: Option<u32>,
+    sort: Option<String>,
+) -> Result<Vec<MarketSkillSummary>, String> {
+    let limit = limit.unwrap_or(24).clamp(1, 60).to_string();
+    let trimmed_query = query.unwrap_or_default().trim().to_string();
+
+    if trimmed_query.is_empty() {
+        let sort = sort.unwrap_or_else(|| "updated".to_string());
+        let response = fetch_clawhub_json::<ClawHubListResponse>(
+            "/skills",
+            &[
+                ("limit", limit),
+                ("sort", sort),
+                ("nonSuspiciousOnly", "true".to_string()),
+            ],
+        )
+        .await?;
+        return Ok(response
+            .items
+            .into_iter()
+            .map(map_clawhub_list_item)
+            .collect());
+    }
+
+    let response = fetch_clawhub_json::<ClawHubSearchResponse>(
+        "/search",
+        &[
+            ("q", trimmed_query),
+            ("limit", limit),
+            ("nonSuspiciousOnly", "true".to_string()),
+        ],
+    )
+    .await?;
+
+    Ok(response
+        .results
+        .into_iter()
+        .map(map_clawhub_search_item)
+        .collect())
+}
+
+#[tauri::command]
+async fn get_market_skill_detail(skill_id: String) -> Result<MarketSkillDetail, String> {
+    let response =
+        fetch_clawhub_json::<ClawHubSkillDetailResponse>(&format!("/skills/{skill_id}"), &[])
+            .await?;
+
+    let ClawHubSkillDetailResponse {
+        skill,
+        latest_version,
+        metadata,
+        owner,
+    } = response;
+    let latest_version = latest_version.or(skill.latest_version.clone());
+    let metadata = metadata.or(skill.metadata.clone());
+    let stats = &skill.stats;
+    let author = owner
+        .and_then(|owner| owner.display_name.or(owner.handle))
+        .unwrap_or_else(default_skill_author);
+
+    Ok(MarketSkillDetail {
+        id: skill.slug.clone(),
+        name: skill.display_name,
+        summary: skill.summary,
+        version: latest_version
+            .as_ref()
+            .map(|entry| entry.version.clone())
+            .unwrap_or_else(|| version_from_tags(&skill.tags)),
+        updated_at: skill.updated_at.or_else(|| {
+            latest_version
+                .as_ref()
+                .and_then(|entry| entry.created_at)
+        }),
+        author,
+        changelog: latest_version
+            .and_then(|entry| entry.changelog)
+            .unwrap_or_default(),
+        installs: market_installs(stats),
+        downloads: market_downloads(stats),
+        stars: market_stars(stats),
+        platform_targets: market_platform_targets(metadata.as_ref()),
+        system_targets: market_system_targets(metadata.as_ref()),
+        source_url: clawhub_source_url(&skill.slug),
+    })
+}
+
+#[tauri::command]
+async fn install_skill(app: AppHandle, payload: InstallSkillPayload) -> Result<InstalledSkillRecord, String> {
     let skills_dir = skills_dir_for_app(&app)?;
     sync_openclaw_skills_extra_dir(&app)?;
     let target_dir = skills_dir.join(skill_dir_name(&payload.id));
-    if !target_dir.exists() {
+    let version = payload
+        .version
+        .clone()
+        .unwrap_or_else(default_skill_version);
+    let mut query = vec![("slug", payload.id.clone())];
+    if payload.version.is_some() && version != "latest" {
+        query.push(("version", version.clone()));
+    }
+    let archive_bytes = fetch_clawhub_bytes("/download", &query).await?;
+    let temp_dir = temp_install_dir(&payload.id);
+    extract_clawhub_zip(&payload.id, &archive_bytes, &temp_dir)?;
+    let install_result = (|| -> Result<(), String> {
+        let extracted_root = find_skill_root(&temp_dir)
+            .ok_or_else(|| format!("ClawHub 返回的技能 {} 缺少 SKILL.md", payload.id))?;
+
+        if target_dir.exists() {
+            fs::remove_dir_all(&target_dir)
+                .map_err(|error| format!("无法清理旧技能目录 {}: {error}", target_dir.display()))?;
+        }
         fs::create_dir_all(&target_dir)
             .map_err(|error| format!("无法创建技能目录 {}: {error}", target_dir.display()))?;
-    }
+        copy_dir_contents(&extracted_root, &target_dir)?;
+        write_managed_skill_metadata(&target_dir, &payload, &version)?;
+        Ok(())
+    })();
+    let _ = fs::remove_dir_all(&temp_dir);
+    install_result?;
 
-    let skill_markdown = build_skill_markdown(&payload);
-    let manifest = SkillManifest {
+    let manifest_path = target_dir.join("skill.json");
+
+    Ok(InstalledSkillRecord {
         id: payload.id,
         name: payload.name,
         category: payload.category,
         summary: payload.summary,
         author: payload.author,
-        version: "0.1.0".to_string(),
-        entry: "SKILL.md".to_string(),
-    };
-
-    let manifest_path = target_dir.join("skill.json");
-    let manifest_body = serde_json::to_string_pretty(&manifest)
-        .map_err(|error| format!("无法序列化技能清单: {error}"))?;
-    fs::write(&manifest_path, manifest_body)
-        .map_err(|error| format!("无法写入技能清单 {}: {error}", manifest_path.display()))?;
-    let skill_markdown_path = target_dir.join("SKILL.md");
-    fs::write(&skill_markdown_path, skill_markdown)
-        .map_err(|error| format!("无法写入技能说明 {}: {error}", skill_markdown_path.display()))?;
-
-    Ok(InstalledSkillRecord {
-        id: manifest.id,
+        version,
         manifest_path: manifest_path.to_string_lossy().to_string(),
         directory: target_dir.to_string_lossy().to_string(),
     })
@@ -1210,11 +2109,14 @@ pub fn run() {
             ensure_openclaw_runtime,
             get_openclaw_dashboard_url,
             get_openclaw_runtime_info,
+            run_openclaw_self_check,
             get_openclaw_auth_config,
             save_openclaw_auth_config,
             send_openclaw_message,
             list_installed_skills,
             list_recognized_skills,
+            list_market_skills,
+            get_market_skill_detail,
             install_skill,
             remove_skill,
             install_bundled_openclaw_runtime,

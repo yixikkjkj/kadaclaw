@@ -59,6 +59,22 @@ npm run tauri:build
 npm run check
 ```
 
+本地 smoke check：
+
+```bash
+npm run check:smoke
+```
+
+这个命令会执行：
+
+- TypeScript + Rust 编译检查
+- 前端构建
+- 输出一份手动验证清单，用于验收内置 OpenClaw 安装、自检、Runtime 启动和技能安装链路
+
+运行时安装、自检项说明、平台差异和人工验收步骤见：
+
+- [docs/runtime-validation.md](./docs/runtime-validation.md)
+
 刷新桌面应用图标：
 
 ```bash
@@ -90,6 +106,10 @@ Kadaclaw 维护两套配置：
 
 - Kadaclaw 的窗口配置、启动参数、base URL 存在应用配置 `openclaw.json`
 - OpenClaw 自己会真正读取的 runtime 配置存在 `openclaw-runtime/config/openclaw.json`
+
+不同平台的实际目录计算方式、Windows 包装器行为和校验建议见：
+
+- [docs/runtime-validation.md](./docs/runtime-validation.md)
 
 ## Kadaclaw 如何和 OpenClaw 通信
 
@@ -182,6 +202,18 @@ openclaw skills list --json
 ```bash
 curl -fsSL --proto '=https' --tlsv1.2 https://openclaw.ai/install-cli.sh | bash -s -- --prefix "<app-local-data>/openclaw-runtime" --version latest
 ```
+
+Windows 下当前走 PowerShell 官方安装脚本，再由 Kadaclaw 在应用私有目录生成 `openclaw.cmd` 包装器：
+
+```powershell
+& ([scriptblock]::Create((Invoke-WebRequest -UseBasicParsing https://openclaw.ai/install.ps1))) -NoOnboard
+```
+
+注意：
+
+- Windows 已支持安装，但仍属于兼容路径
+- 如果遇到 PowerShell 安装失败、`npm` 缺失、命令找不到或 runtime 启动异常，优先考虑 WSL2
+- Kadaclaw 在 Windows 下会额外做一次 `openclaw --version` 自检，避免把不可用路径写入配置
 
 也就是说，当前产品形态更准确地说是：
 

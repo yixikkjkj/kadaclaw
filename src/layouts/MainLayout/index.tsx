@@ -78,6 +78,7 @@ export default function MainLayout() {
           getErrorMessage(reason, "尚未检测到 OpenClaw runtime，请完成首次安装"),
         );
         setShowOnboarding(true);
+        setBootstrapping(false);
         return null;
       } finally {
         refreshPromiseRef.current = null;

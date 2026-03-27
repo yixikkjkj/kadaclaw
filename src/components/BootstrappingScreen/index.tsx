@@ -21,7 +21,6 @@ export function BootstrappingScreen({
           percent={runtimeStatus === "ready" ? 100 : runtimeStatus === "checking" ? 68 : 32}
           showInfo={false}
           strokeColor="#0f7b6c"
-          trailColor="#d9e6df"
         />
       </Flex>
     </Card>

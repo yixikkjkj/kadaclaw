@@ -457,6 +457,10 @@
   max-width: 760px;
 }
 
+.routeStatusCard {
+  width: min(760px, 100%);
+}
+
 .installedHero:global(.ant-card) :global(.ant-list-item) {
   padding-inline: 0;
 }

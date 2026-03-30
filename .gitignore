@@ -6,3 +6,4 @@ node_modules/
 dist/
 scripts/__pycache__/
 src-tauri/target/
+my/

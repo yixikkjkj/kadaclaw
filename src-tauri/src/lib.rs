@@ -681,6 +681,14 @@ fn validate_bundled_command(command_path: &Path) -> Result<(), String> {
         ));
     }
 
+    // On Windows, skip running --version: node may not yet be on PATH in the
+    // Tauri process after a fresh Node.js install (PATH is only updated inside
+    // the installer's PowerShell session). File existence is sufficient here;
+    // runtime reachability is verified when the user actually launches it.
+    if cfg!(target_os = "windows") {
+        return Ok(());
+    }
+
     let command = command_path.to_string_lossy().to_string();
     read_openclaw_version(&command).map(|_| ())
 }

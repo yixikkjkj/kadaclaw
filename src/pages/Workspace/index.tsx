@@ -4,16 +4,15 @@ import { useNavigate } from "react-router";
 import { OpenClawChatPanel } from "~/components";
 import { ROUTE_PATHS, activityRecords } from "~/common/constants";
 import { probeOpenClawRuntime, type OpenClawStatus } from "~/api";
-import { useAppStore } from "~/store";
-import * as styles from "~/common/ui.css";
+import { useRuntimeStore, useSkillStore } from "~/store";
+import styles from "./index.css";
 
 const { Paragraph, Text, Title } = Typography;
 
 export function WorkspacePage() {
-  const installedSkillIds = useAppStore((state) => state.installedSkillIds);
-  const marketSkills = useAppStore((state) => state.marketSkills);
-  const runtimeStatus = useAppStore((state) => state.runtimeStatus);
-  const runtimeMessage = useAppStore((state) => state.runtimeMessage);
+  const installedSkillIds = useSkillStore((state) => state.installedSkillIds);
+  const runtimeStatus = useRuntimeStore((state) => state.runtimeStatus);
+  const runtimeMessage = useRuntimeStore((state) => state.runtimeMessage);
   const navigate = useNavigate();
   const [runtimeInfo, setRuntimeInfo] = useState<OpenClawStatus | null>(null);
 
@@ -37,7 +36,7 @@ export function WorkspacePage() {
 
   return (
     <Flex vertical gap={20}>
-      <Card className={[styles.heroCard, styles.workspaceHero].join(" ")}>
+      <Card className={styles.workspaceHero}>
         <div className={styles.workspaceHeroGrid}>
           <div className={styles.workspaceCopy}>
             <Tag color="cyan" className={styles.heroTag}>
@@ -47,11 +46,12 @@ export function WorkspacePage() {
               把 OpenClaw 直接放进桌面聊天工作台
             </Title>
             <Paragraph className={styles.heroCopy}>
-              主界面现在以聊天窗口为中心，消息会直接进入本地 OpenClaw session。技能市场和运行时控制仍然保留在同一个桌面客户端里。
+              主界面以聊天窗口为中心，消息会直接进入本地 OpenClaw session。公共技能市场已经移除，
+              后续会在同一个客户端里接入私有 Skillshub。
             </Paragraph>
             <Flex gap={12} wrap>
-              <Button type="primary" size="large" onClick={() => navigate(ROUTE_PATHS.market)}>
-                浏览技能市场
+              <Button type="primary" size="large" onClick={() => navigate(ROUTE_PATHS.skills)}>
+                查看技能中心预留页
               </Button>
               <Button size="large" onClick={() => navigate(ROUTE_PATHS.settings)}>
                 管理 Runtime
@@ -69,34 +69,36 @@ export function WorkspacePage() {
             </div>
           </div>
           <div className={styles.workspaceAside}>
-            <Card className={[styles.spotlightPanel, styles.runtimePanel].join(" ")}>
-              <div className={styles.runtimePanelHead}>
-                <div>
-                  <Text type="secondary">Runtime 摘要</Text>
-                  <Title level={3}>桌面控制中心</Title>
+            <Card>
+              <div className={styles.runtimePanelContent}>
+                <div className={styles.runtimePanelHead}>
+                  <div>
+                    <Text type="secondary">Runtime 摘要</Text>
+                    <Title level={3}>桌面控制中心</Title>
+                  </div>
+                  <div className={styles.runtimeOrb} />
                 </div>
-                <div className={styles.runtimeOrb} />
-              </div>
-              <Paragraph type="secondary">
-                {runtimeInfo?.message ?? runtimeMessage}
-              </Paragraph>
-              <Progress
-                percent={runtimeStatus === "ready" ? 100 : runtimeStatus === "checking" ? 72 : 28}
-                showInfo={false}
-                strokeColor={{
-                  "0%": "#0f7b6c",
-                  "100%": "#d98a32",
-                }}
-                trailColor="rgba(28, 35, 31, 0.08)"
-              />
-              <div className={styles.statusStrip}>
-                <span className={styles.statusDot} />
-                <Text>{runtimeStatus === "ready" ? "已就绪" : "等待就绪"}</Text>
-              </div>
-              <div className={styles.runtimeMetaGrid}>
-                <div>
-                  <Text type="secondary">检测端</Text>
-                  <strong>{runtimeInfo?.endpoint ?? "--"}</strong>
+                <Paragraph type="secondary">
+                  {runtimeInfo?.message ?? runtimeMessage}
+                </Paragraph>
+                <Progress
+                  percent={runtimeStatus === "ready" ? 100 : runtimeStatus === "checking" ? 72 : 28}
+                  showInfo={false}
+                  strokeColor={{
+                    "0%": "#0f7b6c",
+                    "100%": "#d98a32",
+                  }}
+                  trailColor="rgba(28, 35, 31, 0.08)"
+                />
+                <div className={styles.statusStrip}>
+                  <span className={styles.statusDot} />
+                  <Text>{runtimeStatus === "ready" ? "已就绪" : "等待就绪"}</Text>
+                </div>
+                <div className={styles.runtimeMetaGrid}>
+                  <div>
+                    <Text type="secondary">检测端</Text>
+                    <strong>{runtimeInfo?.endpoint ?? "--"}</strong>
+                  </div>
                 </div>
               </div>
             </Card>
@@ -106,17 +108,17 @@ export function WorkspacePage() {
 
       <Row gutter={[16, 16]}>
         <Col xs={24} md={8}>
-          <Card className={styles.metricCard}>
+          <Card>
             <Statistic title="已安装技能" value={installedSkillIds.length} suffix="个" />
           </Card>
         </Col>
         <Col xs={24} md={8}>
-          <Card className={styles.metricCard}>
-            <Statistic title="技能市场" value={marketSkills.length || "--"} suffix={marketSkills.length ? "个" : ""} />
+          <Card>
+            <Statistic title="Skillshub" value="待接入" />
           </Card>
         </Col>
         <Col xs={24} md={8}>
-          <Card className={styles.metricCard}>
+          <Card>
             <Statistic
               title="Runtime 状态"
               value={runtimeStatus === "ready" ? "在线" : runtimeStatus === "checking" ? "检测中" : "未就绪"}
@@ -131,7 +133,7 @@ export function WorkspacePage() {
         </Col>
         <Col xs={24} xl={9}>
           <Flex vertical gap={16}>
-            <Card className={styles.panelCard} title="OpenClaw Runtime">
+            <Card title="OpenClaw Runtime">
               <Flex vertical gap={10}>
                 <Text type="secondary">{runtimeMessage}</Text>
                 <Button type="primary" onClick={() => navigate(ROUTE_PATHS.settings)}>
@@ -139,7 +141,7 @@ export function WorkspacePage() {
                 </Button>
               </Flex>
             </Card>
-            <Card className={styles.panelCard} title="最近运行">
+            <Card title="最近运行">
               <Timeline
                 items={activityRecords.map((record) => ({
                   color:

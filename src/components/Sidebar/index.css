@@ -1,0 +1,19 @@
+.wrapper {
+  display: flex;
+  height: 100%;
+  flex-direction: column;
+  gap: 16px;
+  padding: 24px 16px;
+}
+
+.chatMenuScroll {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.bottomMenu {
+  margin-top: auto;
+  padding-top: 8px;
+  border-top: 1px solid rgba(33, 68, 59, 0.08);
+}

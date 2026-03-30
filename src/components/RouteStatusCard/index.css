@@ -1,0 +1,7 @@
+.bootstrapCard {
+  max-width: 760px;
+}
+
+.routeStatusCard {
+  width: min(760px, 100%);
+}

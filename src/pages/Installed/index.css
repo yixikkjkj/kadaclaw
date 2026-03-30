@@ -1,1 +1,14 @@
-/* Local styles for pages/Installed. Shared UI tokens live in ~/common/ui.css. */
+.listAvatar {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  color: #fdfaf4;
+  font-weight: 700;
+  background: linear-gradient(135deg, #0f7b6c 0%, #2f6955 100%);
+}
+
+.featuredAvatar {
+  background: linear-gradient(135deg, #d98a32 0%, #0f7b6c 100%);
+}

@@ -1,22 +1,25 @@
 import { Layout } from "antd";
-import { Suspense, lazy, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Outlet, useNavigate } from "react-router";
-import { ensureOpenClawRuntime, getOpenClawRuntimeInfo, installBundledOpenClawRuntime, launchOpenClawRuntime, listInstalledSkills, listRecognizedSkills } from "~/api";
+import {
+  ensureOpenClawRuntime,
+  getOpenClawRuntimeInfo,
+  installBundledOpenClawRuntime,
+  launchOpenClawRuntime,
+} from "~/api";
 import { ROUTE_PATHS } from "~/common/constants";
 import { getErrorMessage } from "~/common/utils";
-import { AppHeaderBar, AppSidebar, BootstrappingScreen, OnboardingModal } from "~/components";
-import * as styles from "~/common/ui.css";
-import { useAppStore } from "~/store";
+import { Sidebar, BootstrappingScreen, OnboardingModal, SkillDetailDrawer } from "~/components";
+import styles from "./index.css";
+import { useRuntimeStore, useSkillStore } from "~/store";
 
-const { Header, Content } = Layout;
-const SkillDetailDrawer = lazy(async () =>
-  import("~/components/SkillDetailDrawer").then((module) => ({ default: module.SkillDetailDrawer })),
-);
+const { Content } = Layout;
 
 export default function MainLayout() {
-  const runtimeMessage = useAppStore((state) => state.runtimeMessage);
-  const runtimeStatus = useAppStore((state) => state.runtimeStatus);
-  const setRuntimeState = useAppStore((state) => state.setRuntimeState);
+  const runtimeMessage = useRuntimeStore((state) => state.runtimeMessage);
+  const runtimeStatus = useRuntimeStore((state) => state.runtimeStatus);
+  const setRuntimeState = useRuntimeStore((state) => state.setRuntimeState);
+  const refreshInstalledSkills = useSkillStore((state) => state.refreshInstalledSkills);
   const navigate = useNavigate();
   const [bootstrapping, setBootstrapping] = useState(true);
   const [showOnboarding, setShowOnboarding] = useState(false);
@@ -36,15 +39,7 @@ export default function MainLayout() {
 
   const syncSkills = async (runtimeReachable: boolean, statusMessage: string) => {
     try {
-      const [installedSkills, recognizedSkills] = await Promise.all([
-        listInstalledSkills(),
-        listRecognizedSkills(),
-      ]);
-      useAppStore.getState().setInstalledSkills(installedSkills);
-      useAppStore.getState().setRecognizedSkills(
-        recognizedSkills.map((item) => item.name),
-        recognizedSkills.filter((item) => item.eligible).map((item) => item.name),
-      );
+      await refreshInstalledSkills();
     } catch (reason) {
       if (runtimeReachable) {
         setRuntimeState(
@@ -96,7 +91,7 @@ export default function MainLayout() {
     bootstrapStartedRef.current = true;
     void refreshRuntimeInfo();
     void refreshRuntime();
-  }, [setRuntimeState]);
+  }, [refreshInstalledSkills, setRuntimeState]);
 
   const runOnboardingInstall = async () => {
     if (onboardingLoading) {
@@ -154,11 +149,8 @@ export default function MainLayout() {
       />
 
       <Layout className={styles.appShell}>
-        <AppSidebar />
+        <Sidebar />
         <Layout>
-          <Header className={styles.appHeader}>
-            <AppHeaderBar />
-          </Header>
           <Content className={styles.appContent}>
             {bootstrapping ? (
               <BootstrappingScreen
@@ -172,9 +164,7 @@ export default function MainLayout() {
         </Layout>
       </Layout>
 
-      <Suspense fallback={null}>
-        <SkillDetailDrawer />
-      </Suspense>
+      <SkillDetailDrawer />
     </>
   );
 }

@@ -1,24 +1,39 @@
-import { Alert, Badge, Button, Card, Col, Descriptions, Flex, Form, Input, message, Row, Select, Statistic, Switch, Table, Tag, Typography } from "antd";
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  Col,
+  Descriptions,
+  Flex,
+  Form,
+  Input,
+  message,
+  Row,
+  Select,
+  Switch,
+  Tag,
+  Typography
+} from "antd";
+import dayjs from "dayjs";
 import { useEffect, useState } from "react";
-import type { TableColumnsType } from "antd";
-import { marketSources } from "~/common/constants";
 import {
   getOpenClawAuthConfig,
   getOpenClawConfig,
   installBundledOpenClawRuntime,
   launchOpenClawRuntime,
-  runOpenClawSelfCheck,
-  saveOpenClawAuthConfig,
-  saveOpenClawConfig,
   type OpenClawAuthConfig,
   type OpenClawConfig,
   type OpenClawSelfCheckResult,
   type OpenClawStatus,
+  runOpenClawSelfCheck,
   type RuntimeInfoResult,
+  saveOpenClawAuthConfig,
+  saveOpenClawConfig,
   upgradeBundledOpenClawRuntime,
 } from "~/api";
-import { useAppStore } from "~/store";
-import * as styles from "~/common/ui.css";
+import { useRuntimeStore } from "~/store";
+import styles from "./index.css";
 
 const { Paragraph, Text, Title } = Typography;
 
@@ -44,50 +59,6 @@ function isWindowsHost() {
   return typeof navigator !== "undefined" && /windows/i.test(navigator.userAgent);
 }
 
-function getHostPlatformInfo() {
-  if (typeof navigator === "undefined") {
-    return {
-      label: "未知环境",
-      installMode: "应用内托管",
-      recommendation: "按当前平台默认方式安装",
-      note: "当前无法从浏览器环境识别宿主系统。",
-    };
-  }
-
-  const userAgent = navigator.userAgent.toLowerCase();
-  if (userAgent.includes("windows")) {
-    return {
-      label: "Windows",
-      installMode: "PowerShell + app-local wrapper",
-      recommendation: "兼容支持，优先推荐 WSL2",
-      note: "如果遇到 PowerShell、npm、PATH 或 runtime 启动异常，优先改用 WSL2。",
-    };
-  }
-  if (userAgent.includes("mac os")) {
-    return {
-      label: "macOS",
-      installMode: "官方 shell 安装器",
-      recommendation: "推荐直接使用内置安装",
-      note: "当前桌面端对 macOS 路径和内置 runtime 目录的适配最完整。",
-    };
-  }
-  if (userAgent.includes("linux")) {
-    return {
-      label: "Linux",
-      installMode: "官方 shell 安装器",
-      recommendation: "推荐直接使用内置安装",
-      note: "若发行版限制较多，请确认 shell、网络和执行权限可用。",
-    };
-  }
-
-  return {
-    label: "未知环境",
-    installMode: "应用内托管",
-    recommendation: "按当前平台默认方式安装",
-    note: "当前无法可靠识别宿主系统，安装前请确认 shell 或 PowerShell 环境可用。",
-  };
-}
-
 type SelfCheckState = "pass" | "warn" | "fail";
 
 function getSelfCheckBadge(state: SelfCheckState) {
@@ -106,7 +77,7 @@ function formatCheckTime(value?: number | null) {
   if (!value) {
     return "尚未执行";
   }
-  return new Date(value).toLocaleString("zh-CN");
+  return dayjs(value).format("YYYY/M/D HH:mm:ss");
 }
 
 export function SettingsPage() {
@@ -117,9 +88,8 @@ export function SettingsPage() {
   const [selfCheckResult, setSelfCheckResult] = useState<OpenClawSelfCheckResult | null>(null);
   const [authConfig, setAuthConfig] = useState<OpenClawAuthConfig | null>(null);
   const [loading, setLoading] = useState(false);
-  const setRuntimeState = useAppStore((state) => state.setRuntimeState);
+  const setRuntimeState = useRuntimeStore((state) => state.setRuntimeState);
   const windowsHost = isWindowsHost();
-  const platformInfo = getHostPlatformInfo();
 
   const refreshRuntimeInfo = async () => {
     try {
@@ -286,25 +256,11 @@ export function SettingsPage() {
     }
   };
 
-  const marketColumns: TableColumnsType<(typeof marketSources)[number]> = [
-    { title: "市场源", dataIndex: "name", key: "name" },
-    { title: "范围", dataIndex: "scope", key: "scope" },
-    { title: "最近同步", dataIndex: "sync", key: "sync" },
-    {
-      title: "状态",
-      dataIndex: "status",
-      key: "status",
-      render: (value: string) => (
-        <Badge status={value === "在线" ? "success" : "error"} text={value} />
-      ),
-    },
-  ];
-
   const selfChecks = selfCheckResult?.items ?? [];
 
   return (
     <Flex vertical gap={20}>
-      <Card className={[styles.heroCard, styles.settingsHero].join(" ")}>
+      <Card className={styles.settingsHero}>
         <div className={styles.settingsHeroGrid}>
           <div>
             <Tag color="green" className={styles.heroTag}>
@@ -314,7 +270,8 @@ export function SettingsPage() {
               内置 OpenClaw 管理中心
             </Title>
             <Paragraph className={styles.heroCopy}>
-              安装、升级、探测和高级配置都集中在这里。目标不是暴露更多复杂度，而是把 OpenClaw 的运行时管理真正收进 Kadaclaw 客户端。
+              安装、升级、探测和高级配置都集中在这里。目标不是暴露更多复杂度，而是把 OpenClaw 的运行时管理真正收进 Kadaclaw
+              客户端。
             </Paragraph>
             <Flex gap={8} wrap style={{ marginBottom: 8 }}>
               <Button type="primary" loading={loading} onClick={() => void installBundledRuntime()}>
@@ -332,17 +289,19 @@ export function SettingsPage() {
             </Flex>
           </div>
           <div>
-            <Card className={[styles.spotlightPanel, styles.runtimePanel].join(" ")}>
-              <Text type="secondary">Runtime 摘要</Text>
-              <Title level={3}>当前环境</Title>
-              <div className={styles.runtimeMetaGrid}>
-                <div>
-                  <Text type="secondary">安装状态</Text>
-                  <strong>{runtimeInfo?.installed ? "已安装" : "未安装"}</strong>
-                </div>
-                <div>
-                  <Text type="secondary">版本</Text>
-                  <strong>{runtimeInfo?.version ?? "--"}</strong>
+            <Card>
+              <div className={styles.runtimePanelContent}>
+                <Text type="secondary">Runtime 摘要</Text>
+                <Title level={3}>当前环境</Title>
+                <div className={styles.runtimeMetaGrid}>
+                  <div>
+                    <Text type="secondary">安装状态</Text>
+                    <strong>{runtimeInfo?.installed ? "已安装" : "未安装"}</strong>
+                  </div>
+                  <div>
+                    <Text type="secondary">版本</Text>
+                    <strong>{runtimeInfo?.version ?? "--"}</strong>
+                  </div>
                 </div>
               </div>
             </Card>
@@ -354,40 +313,12 @@ export function SettingsPage() {
         <Alert
           type="info"
           showIcon
-          message="Windows 运行建议"
+          title="Windows 运行建议"
           description="Kadaclaw 现在支持 Windows 下安装内置 OpenClaw，但如果你遇到 PowerShell 安装失败、命令找不到或 runtime 无法启动，优先考虑使用 WSL2 方案。"
         />
       ) : null}
 
-      <Card className={styles.panelCard} title="平台状态">
-        <Descriptions column={1} size="small">
-          <Descriptions.Item label="当前系统">{platformInfo.label}</Descriptions.Item>
-          <Descriptions.Item label="安装模式">{platformInfo.installMode}</Descriptions.Item>
-          <Descriptions.Item label="推荐方案">{platformInfo.recommendation}</Descriptions.Item>
-          <Descriptions.Item label="说明">{platformInfo.note}</Descriptions.Item>
-        </Descriptions>
-      </Card>
-
-      <Row gutter={[16, 16]}>
-        <Col xs={24} md={8}>
-          <Card className={styles.metricCard}>
-            <Statistic title="Runtime 安装" value={runtimeInfo?.installed ? "已安装" : "未安装"} />
-          </Card>
-        </Col>
-        <Col xs={24} md={8}>
-          <Card className={styles.metricCard}>
-            <Statistic title="内置模式" value={runtimeInfo?.bundled ? "已托管" : "外部模式"} />
-          </Card>
-        </Col>
-        <Col xs={24} md={8}>
-          <Card className={styles.metricCard}>
-            <Statistic title="技能目录" value={runtimeInfo?.skillsDir ? "已就位" : "未准备"} />
-          </Card>
-        </Col>
-      </Row>
-
       <Card
-        className={styles.panelCard}
         title="安装后自检"
         extra={
           <Flex align="center" gap={12}>
@@ -411,7 +342,7 @@ export function SettingsPage() {
         </Descriptions>
       </Card>
 
-      <Card className={styles.panelCard} title="OpenClaw Runtime 配置">
+      <Card title="OpenClaw Runtime 配置">
         <Paragraph type="secondary">
           默认情况下 Kadaclaw 会托管内置 runtime。这里保留高级入口，方便你覆盖默认端口、模型和启动参数。
         </Paragraph>
@@ -470,7 +401,7 @@ export function SettingsPage() {
         </Form>
       </Card>
 
-      <Card className={styles.panelCard} title="模型与授权">
+      <Card title="模型与授权">
         <Flex vertical gap={16}>
           <Alert
             type={authConfig?.apiKeyConfigured ? "success" : "warning"}
@@ -560,7 +491,7 @@ export function SettingsPage() {
       <Row gutter={[16, 16]}>
         {runtimeStatus ? (
           <Col xs={24} xl={12}>
-            <Card className={styles.panelCard} title="OpenClaw 检测结果">
+            <Card title="OpenClaw 检测结果">
               <Descriptions column={1} size="small">
                 <Descriptions.Item label="Endpoint">{runtimeStatus.endpoint}</Descriptions.Item>
                 <Descriptions.Item label="消息">{runtimeStatus.message}</Descriptions.Item>
@@ -580,7 +511,7 @@ export function SettingsPage() {
 
         {runtimeInfo ? (
           <Col xs={24} xl={12}>
-            <Card className={styles.panelCard} title="OpenClaw Runtime 信息">
+            <Card title="OpenClaw Runtime 信息">
               <Descriptions column={1} size="small">
                 <Descriptions.Item label="版本">{runtimeInfo.version}</Descriptions.Item>
                 <Descriptions.Item label="版本读取错误">
@@ -594,21 +525,6 @@ export function SettingsPage() {
           </Col>
         ) : null}
       </Row>
-
-      <Card className={styles.panelCard} title="技能市场源">
-        <Table rowKey="id" columns={marketColumns} dataSource={marketSources} pagination={false} />
-      </Card>
-
-      <Card className={styles.panelCard} title="产品接入说明">
-        <Descriptions column={1} size="small">
-          <Descriptions.Item label="OpenClaw 接入">
-            通过桌面端 Provider 层适配对话、技能执行和工具调用。
-          </Descriptions.Item>
-          <Descriptions.Item label="技能目录打通">
-            Kadaclaw 已经为内置 OpenClaw 固定私有 skills 目录，市场安装现在会把技能清单直接写入这里。
-          </Descriptions.Item>
-        </Descriptions>
-      </Card>
     </Flex>
   );
 }

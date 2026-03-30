@@ -1,5 +1,5 @@
 import { Alert, Badge, Button, Card, Flex, Modal, Typography } from "antd";
-import * as styles from "~/common/ui.css";
+import styles from "./index.css";
 
 const { Paragraph, Text } = Typography;
 

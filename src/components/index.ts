@@ -1,5 +1,4 @@
-export * from "./AppHeaderBar";
-export * from "./AppSidebar";
+export * from "./Sidebar";
 export * from "./BootstrappingScreen";
 export * from "./OnboardingModal";
 export * from "./OpenClawChatPanel";

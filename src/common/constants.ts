@@ -1,6 +1,6 @@
 export const ROUTE_PATHS = {
   workspace: "/workspace",
-  market: "/market",
+  skills: "/skills",
   installed: "/installed",
   settings: "/settings",
 } as const;
@@ -14,14 +14,6 @@ export interface ActivityRecord {
   status: "成功" | "运行中" | "需处理";
   updatedAt: string;
   owner: string;
-}
-
-export interface MarketSource {
-  id: string;
-  name: string;
-  scope: string;
-  sync: string;
-  status: "在线" | "离线";
 }
 
 export const activityRecords: ActivityRecord[] = [
@@ -48,22 +40,5 @@ export const activityRecords: ActivityRecord[] = [
     status: "需处理",
     updatedAt: "昨天 18:10",
     owner: "内容运营",
-  },
-];
-
-export const marketSources: MarketSource[] = [
-  {
-    id: "source-clawhub",
-    name: "ClawHub 官方源",
-    scope: "公开技能",
-    sync: "实时拉取",
-    status: "在线",
-  },
-  {
-    id: "source-local",
-    name: "Kadaclaw 本地托管目录",
-    scope: "已安装技能",
-    sync: "按需刷新",
-    status: "在线",
   },
 ];

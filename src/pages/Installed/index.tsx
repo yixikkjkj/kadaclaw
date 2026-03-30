@@ -1,35 +1,39 @@
 import { Alert, Button, Card, Col, Descriptions, Empty, Flex, List, Row, Statistic, Tag, Typography } from "antd";
-import { useSkillInstall } from "~/store";
-import { useAppStore } from "~/store";
-import * as styles from "~/common/ui.css";
+import { useSkillStore } from "~/store";
+import styles from "./index.css";
 
 const { Paragraph } = Typography;
 
 export function InstalledPage() {
-  const openSkill = useAppStore((state) => state.openSkill);
-  const { installedSkills, recognizedSkillIds, readySkillIds, skillOperations, skillOperationError, toggleSkillInstall } = useSkillInstall();
+  const openSkill = useSkillStore((state) => state.openSkill);
+  const installedSkills = useSkillStore((state) => state.installedSkills);
+  const recognizedSkillIds = useSkillStore((state) => state.recognizedSkillIds);
+  const readySkillIds = useSkillStore((state) => state.readySkillIds);
+  const skillOperations = useSkillStore((state) => state.skillOperations);
+  const skillOperationError = useSkillStore((state) => state.skillOperationError);
+  const removeInstalledSkill = useSkillStore((state) => state.removeInstalledSkill);
 
   return (
     <Flex vertical gap={20}>
       <Row gutter={[16, 16]}>
         <Col xs={24} md={8}>
-          <Card className={styles.metricCard}>
+          <Card>
             <Statistic title="已安装技能" value={installedSkills.length} suffix="个" />
           </Card>
         </Col>
         <Col xs={24} md={8}>
-          <Card className={styles.metricCard}>
+          <Card>
             <Statistic title="OpenClaw 已识别" value={recognizedSkillIds.length} suffix="个" />
           </Card>
         </Col>
         <Col xs={24} md={8}>
-          <Card className={styles.metricCard}>
+          <Card>
             <Statistic title="可直接使用" value={readySkillIds.length} suffix="个" />
           </Card>
         </Col>
       </Row>
 
-      <Card className={[styles.panelCard, styles.installedHero].join(" ")} title="已安装技能">
+      <Card title="已安装技能">
         {skillOperationError ? (
           <Alert type="error" showIcon message={skillOperationError} style={{ marginBottom: 16 }} />
         ) : null}
@@ -54,16 +58,7 @@ export function InstalledPage() {
                     key="remove"
                     loading={busy}
                     disabled={busy}
-                    onClick={() =>
-                      void toggleSkillInstall({
-                        id: skill.id,
-                        name: skill.name,
-                        summary: skill.summary,
-                        category: skill.category,
-                        author: skill.author,
-                        version: skill.version,
-                      })
-                    }
+                    onClick={() => void removeInstalledSkill(skill.id, skill.name)}
                   >
                     {operation === "removing" ? "卸载中" : "卸载"}
                   </Button>,
@@ -89,11 +84,11 @@ export function InstalledPage() {
         />
       </Card>
 
-      <Card className={styles.panelCard} title="本地落盘信息">
+      <Card title="本地落盘信息">
         <Row gutter={[16, 16]}>
           {installedSkills.map((skill) => (
             <Col xs={24} md={12} key={skill.id}>
-              <Card className={[styles.innerCard, styles.installedCapabilityCard].join(" ")}>
+              <Card>
                 <Descriptions column={1} size="small">
                   <Descriptions.Item label="技能 ID">{skill.id}</Descriptions.Item>
                   <Descriptions.Item label="Manifest">{skill.manifestPath}</Descriptions.Item>

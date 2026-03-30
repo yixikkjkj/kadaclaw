@@ -1,8 +1,9 @@
 import { Alert, Avatar, Button, Card, Flex, Input, Spin, Tag, Typography } from "antd";
+import dayjs from "dayjs";
 import { useEffect, useRef, useState } from "react";
 import { getOpenClawAuthConfig, sendOpenClawMessage, type OpenClawAuthConfig } from "~/api";
-import { useAppStore } from "~/store";
-import * as styles from "~/common/ui.css";
+import { selectActiveChatSession, useChatStore, useRuntimeStore } from "~/store";
+import styles from "./index.css";
 
 const { Paragraph, Text, Title } = Typography;
 
@@ -11,13 +12,12 @@ function buildMessageId(role: "user" | "assistant" | "system") {
 }
 
 export function OpenClawChatPanel() {
-  const runtimeStatus = useAppStore((state) => state.runtimeStatus);
-  const runtimeMessage = useAppStore((state) => state.runtimeMessage);
-  const chatSessionId = useAppStore((state) => state.chatSessionId);
-  const chatMessages = useAppStore((state) => state.chatMessages);
-  const setChatSessionId = useAppStore((state) => state.setChatSessionId);
-  const appendChatMessage = useAppStore((state) => state.appendChatMessage);
-  const resetChatSession = useAppStore((state) => state.resetChatSession);
+  const runtimeStatus = useRuntimeStore((state) => state.runtimeStatus);
+  const runtimeMessage = useRuntimeStore((state) => state.runtimeMessage);
+  const activeChatSession = useChatStore(selectActiveChatSession);
+  const syncActiveSessionId = useChatStore((state) => state.syncActiveSessionId);
+  const appendMessage = useChatStore((state) => state.appendMessage);
+  const createSession = useChatStore((state) => state.createSession);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -30,7 +30,7 @@ export function OpenClawChatPanel() {
       return;
     }
     container.scrollTop = container.scrollHeight;
-  }, [chatMessages, sending, error]);
+  }, [activeChatSession, sending, error]);
 
   useEffect(() => {
     let active = true;
@@ -57,11 +57,15 @@ export function OpenClawChatPanel() {
       return;
     }
 
-    appendChatMessage({
+    if (!activeChatSession) {
+      return;
+    }
+
+    appendMessage({
       id: buildMessageId("user"),
       role: "user",
       content: message,
-      createdAt: new Date().toISOString(),
+      createdAt: dayjs().toISOString(),
     });
     setInput("");
     setError(null);
@@ -69,15 +73,15 @@ export function OpenClawChatPanel() {
 
     try {
       const result = await sendOpenClawMessage({
-        sessionId: chatSessionId,
+        sessionId: activeChatSession.id,
         message,
       });
-      setChatSessionId(result.sessionId);
-      appendChatMessage({
+      syncActiveSessionId(result.sessionId);
+      appendMessage({
         id: buildMessageId("assistant"),
         role: "assistant",
         content: result.reply || "OpenClaw 未返回可显示内容。",
-        createdAt: new Date().toISOString(),
+        createdAt: dayjs().toISOString(),
       });
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "发送失败，请检查 OpenClaw runtime 和模型授权。");
@@ -88,14 +92,13 @@ export function OpenClawChatPanel() {
 
   return (
     <Card
-      className={[styles.panelCard, styles.chatShell].join(" ")}
       title="和 OpenClaw 聊天"
       extra={
         <Flex gap={10}>
           <Tag color={runtimeStatus === "ready" ? "green" : "orange"}>
             {runtimeStatus === "ready" ? "Runtime 在线" : "等待连接"}
           </Tag>
-          <Button onClick={resetChatSession}>新会话</Button>
+          <Button onClick={createSession}>新会话</Button>
         </Flex>
       }
     >
@@ -116,7 +119,7 @@ export function OpenClawChatPanel() {
           </div>
           <div className={styles.chatSessionChip}>
             <Text type="secondary">Session</Text>
-            <strong>{chatSessionId}</strong>
+            <strong>{activeChatSession?.id ?? "--"}</strong>
           </div>
         </div>
 
@@ -131,7 +134,7 @@ export function OpenClawChatPanel() {
         ) : null}
 
         <div className={styles.chatMessageList} ref={scrollRef}>
-          {chatMessages.map((message) => (
+          {(activeChatSession?.messages ?? []).map((message) => (
             <div
               key={message.id}
               className={[

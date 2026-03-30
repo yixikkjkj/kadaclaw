@@ -1,5 +1,5 @@
 import { Card, Flex, Progress, Spin, Typography } from "antd";
-import * as styles from "~/common/ui.css";
+import styles from "./index.css";
 
 const { Text, Title } = Typography;
 
@@ -13,7 +13,7 @@ export function BootstrappingScreen({
   runtimeStatus,
 }: BootstrappingScreenProps) {
   return (
-    <Card className={[styles.heroCard, styles.bootstrapCard].join(" ")}>
+    <Card className={styles.bootstrapCard}>
       <Flex vertical gap={16}>
         <Spin />
         <Text type="secondary">{runtimeMessage}</Text>

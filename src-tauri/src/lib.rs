@@ -720,14 +720,14 @@ fn classify_windows_install_failure(stderr: &str, stdout: &str) -> String {
             || normalized.contains("commandnotfoundexception")
             || normalized.contains("无法将"))
     {
-        return "Windows 安装失败：系统里没有可用的 npm，官方安装器无法继续。请先安装 Node.js/npm，或优先改用 WSL2。"
+        return "Windows 安装失败：OpenClaw 官方安装器依赖的 Node.js/npm 不可用。请先安装 Node.js/npm，或优先改用 WSL2。"
             .to_string();
     }
 
     if normalized.contains("未能定位 openclaw 命令")
         || normalized.contains("无法解析 openclaw 命令路径")
     {
-        return "Windows 安装失败：官方脚本已执行，但 Kadaclaw 没有找到可用的 openclaw 命令。请检查 PATH / npm 全局目录，或优先改用 WSL2。"
+        return "Windows 安装失败：官方脚本已执行，但 Kadaclaw 没有找到可用的 openclaw 命令。请检查 PATH、Node.js/npm 安装链路，或优先改用 WSL2。"
             .to_string();
     }
 

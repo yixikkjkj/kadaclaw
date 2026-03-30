@@ -4,8 +4,8 @@
   "version": "0.1.0",
   "identifier": "com.kadaclaw.app",
   "build": {
-    "beforeDevCommand": "npm run dev",
-    "beforeBuildCommand": "npm run build",
+    "beforeDevCommand": "yarn dev",
+    "beforeBuildCommand": "yarn build",
     "frontendDist": "../dist",
     "devUrl": "http://localhost:1420"
   },

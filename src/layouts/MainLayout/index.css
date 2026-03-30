@@ -1,6 +1,5 @@
 .appShell {
-  min-height: 100vh;
-  background: transparent;
+  height: 100%;
 }
 
 .appContent {

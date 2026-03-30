@@ -34,7 +34,6 @@ export function OnboardingModal({
     <Modal
       open={open}
       closable={false}
-      maskClosable={false}
       footer={null}
       width={760}
       title="首次启动"
@@ -58,7 +57,6 @@ export function OnboardingModal({
             />
             <Text type="secondary">
               安装目标目录：
-              {" "}
               <Text code>{installDir ?? "<应用本地数据目录>/openclaw-runtime"}</Text>
             </Text>
           </Flex>
@@ -67,7 +65,7 @@ export function OnboardingModal({
           <Alert
             type="info"
             showIcon
-            message="Windows 兼容提示"
+            title="Windows 兼容提示"
             description="当前已支持 Windows 安装，但如果原生环境下出现安装或启动异常，优先考虑在 WSL2 中安装和运行 OpenClaw。"
           />
         ) : null}

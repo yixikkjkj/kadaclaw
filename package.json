@@ -3,6 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "packageManager": "yarn@1.22.19",
   "scripts": {
     "dev": "rspack serve --host 127.0.0.1 --port 1420",
     "build": "tsc && rspack build",
@@ -11,7 +12,7 @@
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
-    "tauri:build--no-sign": "npm run tauri:build -- --no-sign",
+    "tauri:build--no-sign": "yarn tauri:build -- --no-sign",
     "check": "tsc --noEmit && cargo check --manifest-path src-tauri/Cargo.toml",
     "check:smoke": "bash scripts/smoke_check.sh"
   },

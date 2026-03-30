@@ -147,7 +147,6 @@ export default function MainLayout() {
         onStart={() => void runOnboardingStart()}
         onAdvanced={() => navigate(ROUTE_PATHS.settings)}
       />
-
       <Layout className={styles.appShell}>
         <Sidebar />
         <Layout>
@@ -163,7 +162,6 @@ export default function MainLayout() {
           </Content>
         </Layout>
       </Layout>
-
       <SkillDetailDrawer />
     </>
   );

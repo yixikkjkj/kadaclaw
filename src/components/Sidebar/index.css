@@ -1,19 +1,52 @@
 .wrapper {
-  display: flex;
+  padding-top: 32px;
   height: 100%;
-  flex-direction: column;
   gap: 16px;
-  padding: 24px 16px;
+  background: rgb(250, 250, 250);
+  border-right: 1px solid rgba(241, 241, 241);
+  [class*="ant-layout-sider-children"] {
+    display: flex;
+    flex-direction: column;
+  }
+}
+
+.actions {
+  position: absolute;
+  top: 8px;
+  right: 8px;
 }
 
 .chatMenuScroll {
-  min-height: 0;
-  flex: 1;
   overflow-y: auto;
+  background-color: transparent;
+  border-inline-end: none !important;
+}
+
+.deleteButton {
+  flex-shrink: 0;
+  opacity: 0;
+  color: rgba(15, 23, 42, 0.45);
+}
+
+.deleteButton:global(.ant-btn) {
+  width: 24px;
+  min-width: 24px;
+  height: 24px;
+}
+
+.deleteButton:hover {
+  color: #cf1322;
+  background: rgba(207, 19, 34, 0.08);
+}
+
+.chatItem:hover .deleteButton,
+.deleteButton:focus-visible {
+  opacity: 1;
 }
 
 .bottomMenu {
   margin-top: auto;
   padding-top: 8px;
-  border-top: 1px solid rgba(33, 68, 59, 0.08);
+  background-color: transparent;
+  border-inline-end: none !important;
 }

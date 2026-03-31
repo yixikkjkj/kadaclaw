@@ -62,9 +62,7 @@ export function SkillsPage() {
           <Button type="primary" onClick={() => navigate(ROUTE_PATHS.installed)}>
             查看已安装技能
           </Button>
-          <Button onClick={() => navigate(ROUTE_PATHS.settings)}>
-            前往设置
-          </Button>
+          <Button onClick={() => navigate(ROUTE_PATHS.settings)}>前往设置</Button>
         </Flex>
       </Card>
     </Flex>

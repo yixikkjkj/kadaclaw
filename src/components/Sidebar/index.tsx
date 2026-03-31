@@ -1,27 +1,52 @@
 import {
   AppstoreOutlined,
   CloudDownloadOutlined,
+  DeleteOutlined,
+  MenuUnfoldOutlined,
   MessageOutlined,
+  PlusOutlined,
   RocketOutlined,
   SettingOutlined,
 } from "@ant-design/icons";
-import type { MenuProps } from "antd";
-import { Flex, Layout, Menu, Typography } from "antd";
+import { Button, Flex, Layout, Menu, MenuProps, Popconfirm, Tooltip, Typography } from "antd";
 import dayjs from "dayjs";
 import { useLocation, useNavigate } from "react-router";
 import { ROUTE_PATHS } from "~/common/constants";
 import styles from "./index.css";
-import { useChatStore } from "~/store";
+import { useChatStore, useLayoutStore } from "~/store";
 
 const { Sider } = Layout;
-const { Text, Title } = Typography;
+const { Text } = Typography;
 
-const buildChatMenuItem = (sessionId: string, title: string) => ({
+const buildChatMenuItem = (
+  sessionId: string,
+  title: string,
+  onDelete: (sessionId: string) => void,
+) => ({
   key: `chat:${sessionId}`,
   icon: <MessageOutlined />,
   label: (
-    <Flex align="center" gap={4}>
-      <Text ellipsis>{title}</Text>
+    <Flex align="center" className={styles.chatItem} gap={8}>
+      <Text ellipsis style={{ flex: 1 }}>
+        {title}
+      </Text>
+      <Popconfirm
+        title="删除这个会话？"
+        description="本地保存的该会话记录会一并删除。"
+        okText="删除"
+        cancelText="取消"
+        onConfirm={(event) => {
+          event?.stopPropagation();
+          onDelete(sessionId);
+        }}
+      >
+        <Button
+          className={styles.deleteButton}
+          icon={<DeleteOutlined />}
+          size="small"
+          type="text"
+        />
+      </Popconfirm>
     </Flex>
   ),
 });
@@ -30,11 +55,16 @@ export const Sidebar = () => {
   const activeChatSessionId = useChatStore((state) => state.activeChatSessionId);
   const chatSessions = useChatStore((state) => state.chatSessions);
   const activateSession = useChatStore((state) => state.activateSession);
+  const createSession = useChatStore((state) => state.createSession);
+  const deleteSession = useChatStore((state) => state.deleteSession);
+  const collapseSidebar = useLayoutStore((state) => state.collapseSidebar);
+  const toggleCollapseSidebar = useLayoutStore((state) => state.toggleCollapseSidebar);
   const location = useLocation();
   const navigate = useNavigate();
   const sortedChatSessions = [...chatSessions].sort(
     (left, right) => dayjs(right.updatedAt).valueOf() - dayjs(left.updatedAt).valueOf(),
   );
+
   const now = dayjs();
   const todayStart = now.startOf("day");
   const sevenDaysAgo = todayStart.subtract(7, "day");
@@ -50,9 +80,11 @@ export const Sidebar = () => {
       return false;
     }
 
-    return updatedAt.valueOf() >= sevenDaysAgo.valueOf()
-      && updatedAt.valueOf() < todayStart.valueOf()
-      && !updatedAt.isSame(now, "day");
+    return (
+      updatedAt.valueOf() >= sevenDaysAgo.valueOf() &&
+      updatedAt.valueOf() < todayStart.valueOf() &&
+      !updatedAt.isSame(now, "day")
+    );
   });
   const sessionsThisMonth = sortedChatSessions.filter((session) => {
     const updatedAt = dayjs(session.updatedAt);
@@ -76,47 +108,47 @@ export const Sidebar = () => {
   const chatMenuItems: NonNullable<MenuProps["items"]> = [
     ...(sessionsToday.length > 0
       ? [
-        {
-          type: "group" as const,
-          label: "今天",
-          children: sessionsToday.map((session) =>
-            buildChatMenuItem(session.id, session.title),
-          ),
-        },
-      ]
+          {
+            type: "group" as const,
+            label: "今天",
+            children: sessionsToday.map((session) =>
+              buildChatMenuItem(session.id, session.title, deleteSession),
+            ),
+          },
+        ]
       : []),
     ...(sessionsLastSevenDays.length > 0
       ? [
-        {
-          type: "group" as const,
-          label: "近 7 天",
-          children: sessionsLastSevenDays.map((session) =>
-            buildChatMenuItem(session.id, session.title),
-          ),
-        },
-      ]
+          {
+            type: "group" as const,
+            label: "近 7 天",
+            children: sessionsLastSevenDays.map((session) =>
+              buildChatMenuItem(session.id, session.title, deleteSession),
+            ),
+          },
+        ]
       : []),
     ...(sessionsThisMonth.length > 0
       ? [
-        {
-          type: "group" as const,
-          label: "本月",
-          children: sessionsThisMonth.map((session) =>
-            buildChatMenuItem(session.id, session.title),
-          ),
-        },
-      ]
+          {
+            type: "group" as const,
+            label: "本月",
+            children: sessionsThisMonth.map((session) =>
+              buildChatMenuItem(session.id, session.title, deleteSession),
+            ),
+          },
+        ]
       : []),
     ...(sessionsEarlier.length > 0
       ? [
-        {
-          type: "group" as const,
-          label: "更早",
-          children: sessionsEarlier.map((session) =>
-            buildChatMenuItem(session.id, session.title),
-          ),
-        },
-      ]
+          {
+            type: "group" as const,
+            label: "更早",
+            children: sessionsEarlier.map((session) =>
+              buildChatMenuItem(session.id, session.title, deleteSession),
+            ),
+          },
+        ]
       : []),
   ];
   const bottomMenuItems: NonNullable<MenuProps["items"]> = [
@@ -126,12 +158,12 @@ export const Sidebar = () => {
     { key: ROUTE_PATHS.settings, icon: <SettingOutlined />, label: "设置" },
   ];
   const selectedKey =
-    location.pathname === ROUTE_PATHS.workspace && activeChatSessionId
+    location.pathname === ROUTE_PATHS.chat && activeChatSessionId
       ? `chat:${activeChatSessionId}`
       : String(
-        bottomMenuItems.find((item) => item && "key" in item && location.pathname === item.key)?.key ??
-        ROUTE_PATHS.skills,
-      );
+          bottomMenuItems.find((item) => item && "key" in item && location.pathname === item.key)
+            ?.key ?? ROUTE_PATHS.skills,
+        );
   const chatSelectedKeys = selectedKey.startsWith("chat:") ? [selectedKey] : [];
   const bottomSelectedKeys = selectedKey.startsWith("chat:") ? [] : [selectedKey];
 
@@ -140,7 +172,7 @@ export const Sidebar = () => {
 
     if (keyValue.startsWith("chat:")) {
       activateSession(keyValue.slice(5));
-      navigate(ROUTE_PATHS.workspace);
+      navigate(ROUTE_PATHS.chat);
       return;
     }
 
@@ -148,10 +180,28 @@ export const Sidebar = () => {
   };
 
   return (
-    <Sider className={styles.wrapper} width={296} theme="light" collapsible>
-      <Title level={3} style={{ margin: 0 }}>
-        Kadaclaw
-      </Title>
+    <Sider
+      className={styles.wrapper}
+      width={240}
+      collapsible
+      collapsed={collapseSidebar}
+      trigger={null}
+    >
+      {collapseSidebar ? null : (
+        <Flex align="center" className={styles.actions} gap={8} justify="end">
+          <Tooltip title="收起侧边栏">
+            <Button
+              size="small"
+              icon={<MenuUnfoldOutlined />}
+              shape="circle"
+              onClick={toggleCollapseSidebar}
+            />
+          </Tooltip>
+          <Tooltip title="新对话">
+            <Button size="small" shape="circle" icon={<PlusOutlined />} onClick={createSession} />
+          </Tooltip>
+        </Flex>
+      )}
       <Menu
         className={styles.chatMenuScroll}
         mode="inline"
@@ -168,4 +218,4 @@ export const Sidebar = () => {
       />
     </Sider>
   );
-}
+};

@@ -12,11 +12,13 @@
   "app": {
     "windows": [
       {
-        "title": "Kadaclaw",
+        "label": "main",
+        "title": "",
         "width": 1480,
         "height": 960,
         "minWidth": 1180,
         "minHeight": 760,
+        "titleBarStyle": "Overlay",
         "resizable": true
       }
     ],
@@ -27,10 +29,6 @@
   "bundle": {
     "active": true,
     "targets": "all",
-    "icon": [
-      "icons/icon.png",
-      "icons/icon.icns",
-      "icons/icon.ico"
-    ]
+    "icon": ["icons/icon.png", "icons/icon.icns", "icons/icon.ico"]
   }
 }

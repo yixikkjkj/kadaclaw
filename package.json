@@ -1,13 +1,15 @@
 {
   "name": "kadaclaw",
-  "private": true,
   "version": "0.1.0",
+  "private": true,
   "type": "module",
-  "packageManager": "yarn@1.22.19",
   "scripts": {
     "dev": "rspack serve --host 127.0.0.1 --port 1420",
     "build": "tsc && rspack build",
     "preview": "rspack serve --mode production --host 127.0.0.1 --port 1420",
+    "lint": "oxlint .",
+    "format": "oxfmt --write .",
+    "format:check": "oxfmt --check .",
     "icons:generate": "python3 scripts/generate_icons.py",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
@@ -20,6 +22,7 @@
     "@ant-design/icons": "^6.1.1",
     "@tauri-apps/api": "^2.3.0",
     "antd": "^6.3.4",
+    "classnames": "^2.5.1",
     "dayjs": "^1.11.20",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
@@ -33,8 +36,11 @@
     "@tauri-apps/cli": "^2.3.1",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
+    "oxfmt": "^0.42.0",
+    "oxlint": "^1.57.0",
     "ts-loader": "^9.5.2",
     "typescript": "^5.8.2",
     "webpack-dev-server": "^5.2.0"
-  }
+  },
+  "packageManager": "yarn@1.22.19"
 }

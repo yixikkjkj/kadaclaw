@@ -1,7 +1,5 @@
 .chatPanel {
-  min-height: 680px;
-  display: flex;
-  flex-direction: column;
+  height: 100%;
 }
 
 .chatPanelHead {
@@ -83,6 +81,10 @@
   background: rgba(255, 255, 255, 0.78);
 }
 
+.chatBubbleStreaming {
+  background: rgba(255, 255, 255, 0.94);
+}
+
 .chatMeta {
   margin-bottom: 6px;
 }
@@ -90,6 +92,28 @@
 .chatContent {
   margin-bottom: 0;
   white-space: pre-wrap;
+}
+
+.streamingCursor {
+  display: inline-block;
+  width: 0.6em;
+  height: 1.1em;
+  margin-left: 2px;
+  vertical-align: -0.2em;
+  border-radius: 999px;
+  background: rgba(15, 123, 108, 0.7);
+  animation: pulse-cursor 1s ease-in-out infinite;
+}
+
+@keyframes pulse-cursor {
+  0%,
+  100% {
+    opacity: 0.2;
+  }
+
+  50% {
+    opacity: 1;
+  }
 }
 
 .chatAlert {

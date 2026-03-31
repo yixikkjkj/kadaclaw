@@ -1,7 +1,6 @@
-import { Button, Card, Col, Flex, Progress, Row, Statistic, Tag, Timeline, Typography } from "antd";
+import { Button, Card, Col, Flex, Progress, Row, Statistic, Timeline, Typography } from "antd";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
-import { OpenClawChatPanel } from "~/components";
 import { ROUTE_PATHS, activityRecords } from "~/common/constants";
 import { probeOpenClawRuntime, type OpenClawStatus } from "~/api";
 import { useRuntimeStore, useSkillStore } from "~/store";
@@ -39,19 +38,9 @@ export function WorkspacePage() {
       <Card className={styles.workspaceHero}>
         <div className={styles.workspaceHeroGrid}>
           <div className={styles.workspaceCopy}>
-            <Tag color="cyan" className={styles.heroTag}>
-              Kadaclaw Desktop
-            </Tag>
-            <Title level={1} className={styles.workspaceTitle}>
-              把 OpenClaw 直接放进桌面聊天工作台
-            </Title>
-            <Paragraph className={styles.heroCopy}>
-              主界面以聊天窗口为中心，消息会直接进入本地 OpenClaw session。公共技能市场已经移除，
-              后续会在同一个客户端里接入私有 Skillshub。
-            </Paragraph>
             <Flex gap={12} wrap>
-              <Button type="primary" size="large" onClick={() => navigate(ROUTE_PATHS.skills)}>
-                查看技能中心预留页
+              <Button type="primary" size="large" onClick={() => navigate(ROUTE_PATHS.chat)}>
+                打开对话记录
               </Button>
               <Button size="large" onClick={() => navigate(ROUTE_PATHS.settings)}>
                 管理 Runtime
@@ -60,7 +49,7 @@ export function WorkspacePage() {
             <div className={styles.heroPillGrid}>
               <div className={styles.heroPill}>
                 <Text type="secondary">聊天会话</Text>
-                <strong>已内置到工作台</strong>
+                <strong>已迁移到独立页面</strong>
               </div>
               <div className={styles.heroPill}>
                 <Text type="secondary">内置 Runtime</Text>
@@ -78,17 +67,10 @@ export function WorkspacePage() {
                   </div>
                   <div className={styles.runtimeOrb} />
                 </div>
-                <Paragraph type="secondary">
-                  {runtimeInfo?.message ?? runtimeMessage}
-                </Paragraph>
+                <Paragraph type="secondary">{runtimeInfo?.message ?? runtimeMessage}</Paragraph>
                 <Progress
                   percent={runtimeStatus === "ready" ? 100 : runtimeStatus === "checking" ? 72 : 28}
                   showInfo={false}
-                  strokeColor={{
-                    "0%": "#0f7b6c",
-                    "100%": "#d98a32",
-                  }}
-                  trailColor="rgba(28, 35, 31, 0.08)"
                 />
                 <div className={styles.statusStrip}>
                   <span className={styles.statusDot} />
@@ -121,24 +103,30 @@ export function WorkspacePage() {
           <Card>
             <Statistic
               title="Runtime 状态"
-              value={runtimeStatus === "ready" ? "在线" : runtimeStatus === "checking" ? "检测中" : "未就绪"}
+              value={
+                runtimeStatus === "ready"
+                  ? "在线"
+                  : runtimeStatus === "checking"
+                    ? "检测中"
+                    : "未就绪"
+              }
             />
           </Card>
         </Col>
       </Row>
 
       <Row gutter={[16, 16]}>
-        <Col xs={24} xl={15}>
-          <OpenClawChatPanel />
-        </Col>
-        <Col xs={24} xl={9}>
+        <Col xs={24}>
           <Flex vertical gap={16}>
             <Card title="OpenClaw Runtime">
               <Flex vertical gap={10}>
                 <Text type="secondary">{runtimeMessage}</Text>
-                <Button type="primary" onClick={() => navigate(ROUTE_PATHS.settings)}>
-                  前往配置
-                </Button>
+                <Flex gap={12} wrap>
+                  <Button type="primary" onClick={() => navigate(ROUTE_PATHS.chat)}>
+                    打开对话记录
+                  </Button>
+                  <Button onClick={() => navigate(ROUTE_PATHS.settings)}>前往配置</Button>
+                </Flex>
               </Flex>
             </Card>
             <Card title="最近运行">

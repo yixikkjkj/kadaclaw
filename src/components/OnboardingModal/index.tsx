@@ -31,13 +31,7 @@ export function OnboardingModal({
   const windowsHost = isWindowsHost();
 
   return (
-    <Modal
-      open={open}
-      closable={false}
-      footer={null}
-      width={760}
-      title="首次启动"
-    >
+    <Modal open={open} closable={false} footer={null} width={760} title="首次启动">
       <Flex vertical gap={20}>
         <Paragraph style={{ marginBottom: 0 }}>
           Kadaclaw 的目标是自带 OpenClaw，不要求用户先手工部署 runtime。

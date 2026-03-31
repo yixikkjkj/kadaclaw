@@ -1,0 +1,38 @@
+.chatHero {
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.92), rgba(244, 239, 228, 0.9)),
+    radial-gradient(circle at top right, rgba(15, 123, 108, 0.08), transparent 24%);
+}
+
+.chatHeroGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  gap: 20px;
+  align-items: start;
+}
+
+.heroTitle {
+  margin: 12px 0 0 !important;
+}
+
+.heroCopy {
+  margin-top: 12px;
+  margin-bottom: 20px !important;
+  max-width: 720px;
+}
+
+.sessionSummary {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 18px;
+  border: 1px solid rgba(28, 35, 31, 0.08);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.7);
+}
+
+@media (max-width: 992px) {
+  .chatHeroGrid {
+    grid-template-columns: 1fr;
+  }
+}

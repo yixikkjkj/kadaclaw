@@ -83,6 +83,11 @@ export interface OpenClawChatResponse {
   rawOutput: string;
 }
 
+export interface OpenClawChatStreamSnapshot {
+  sessionId: string;
+  content: string;
+}
+
 export function getOpenClawConfig() {
   return invoke<OpenClawConfig>("get_openclaw_config");
 }
@@ -133,4 +138,12 @@ export function saveOpenClawAuthConfig(payload: SaveOpenClawAuthPayload) {
 
 export function sendOpenClawMessage(payload: SendOpenClawMessagePayload) {
   return invoke<OpenClawChatResponse>("send_openclaw_message", { payload });
+}
+
+export function stopOpenClawMessage() {
+  return invoke<boolean>("stop_openclaw_message");
+}
+
+export function getOpenClawActiveStream() {
+  return invoke<OpenClawChatStreamSnapshot | null>("get_openclaw_active_stream");
 }

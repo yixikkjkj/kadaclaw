@@ -1,4 +1,17 @@
-import { Alert, Button, Card, Col, Descriptions, Empty, Flex, List, Row, Statistic, Tag, Typography } from "antd";
+import {
+  Alert,
+  Button,
+  Card,
+  Col,
+  Descriptions,
+  Empty,
+  Flex,
+  List,
+  Row,
+  Statistic,
+  Tag,
+  Typography,
+} from "antd";
 import { useSkillStore } from "~/store";
 import styles from "./index.css";
 
@@ -38,7 +51,8 @@ export function InstalledPage() {
           <Alert type="error" showIcon message={skillOperationError} style={{ marginBottom: 16 }} />
         ) : null}
         <Paragraph type="secondary">
-          这里展示的是已经写入 Kadaclaw 管理目录的本地技能清单，内容来自实际 manifest，而不是前端演示数据。
+          这里展示的是已经写入 Kadaclaw 管理目录的本地技能清单，内容来自实际
+          manifest，而不是前端演示数据。
         </Paragraph>
         <List
           dataSource={installedSkills}
@@ -51,7 +65,12 @@ export function InstalledPage() {
             return (
               <List.Item
                 actions={[
-                  <Button key="view" type="link" disabled={busy} onClick={() => openSkill(skill.id)}>
+                  <Button
+                    key="view"
+                    type="link"
+                    disabled={busy}
+                    onClick={() => openSkill(skill.id)}
+                  >
                     详情
                   </Button>,
                   <Button
@@ -65,7 +84,11 @@ export function InstalledPage() {
                 ]}
               >
                 <List.Item.Meta
-                  avatar={<div className={[styles.listAvatar, styles.featuredAvatar].join(" ")}>{skill.name.slice(0, 1)}</div>}
+                  avatar={
+                    <div className={[styles.listAvatar, styles.featuredAvatar].join(" ")}>
+                      {skill.name.slice(0, 1)}
+                    </div>
+                  }
                   title={skill.name}
                   description={`${skill.summary} · ${skill.version}`}
                 />

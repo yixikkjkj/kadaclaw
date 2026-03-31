@@ -53,15 +53,9 @@ export function SkillDetailDrawer() {
       }
     >
       <Flex vertical gap={20}>
-        {skillOperationError ? (
-          <Alert type="error" showIcon message={skillOperationError} />
-        ) : null}
+        {skillOperationError ? <Alert type="error" showIcon message={skillOperationError} /> : null}
         {!installedSummary ? (
-          <Alert
-            type="warning"
-            showIcon
-            message="当前只保留本地技能信息，未找到对应记录。"
-          />
+          <Alert type="warning" showIcon message="当前只保留本地技能信息，未找到对应记录。" />
         ) : null}
 
         <Flex gap={8} wrap>
@@ -79,7 +73,9 @@ export function SkillDetailDrawer() {
             <Descriptions.Item label="作者">{installedSummary?.author ?? "--"}</Descriptions.Item>
             <Descriptions.Item label="分类">{installedSummary?.category ?? "--"}</Descriptions.Item>
             {installedSummary ? (
-              <Descriptions.Item label="Manifest">{installedSummary.manifestPath}</Descriptions.Item>
+              <Descriptions.Item label="Manifest">
+                {installedSummary.manifestPath}
+              </Descriptions.Item>
             ) : null}
             {installedSummary ? (
               <Descriptions.Item label="本地目录">{installedSummary.directory}</Descriptions.Item>
@@ -89,7 +85,8 @@ export function SkillDetailDrawer() {
 
         <Card title="状态说明">
           <Text type="secondary">
-            公共 ClawHub 市场接入已移除。这里现在只展示本地已安装技能信息，后续会在这一块接入私有 Skillshub。
+            公共 ClawHub 市场接入已移除。这里现在只展示本地已安装技能信息，后续会在这一块接入私有
+            Skillshub。
           </Text>
         </Card>
       </Flex>

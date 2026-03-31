@@ -1,12 +1,23 @@
 import path from "node:path";
+import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "@rspack/cli";
 import { HtmlRspackPlugin } from "@rspack/core";
-import ReactRefreshRspackPlugin from '@rspack/plugin-react-refresh';
+import ReactRefreshRspackPlugin from "@rspack/plugin-react-refresh";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const require = createRequire(import.meta.url);
 const isDev = process.env.NODE_ENV === "development";
+const hasReactRefreshRuntime = (() => {
+  try {
+    require.resolve("react-refresh");
+    return true;
+  } catch {
+    return false;
+  }
+})();
+const enableReactRefresh = isDev && hasReactRefreshRuntime;
 
 export default defineConfig({
   context: __dirname,
@@ -62,7 +73,7 @@ export default defineConfig({
                   react: {
                     runtime: "automatic",
                     development: isDev,
-                    refresh: isDev,
+                    refresh: enableReactRefresh,
                   },
                 },
               },
@@ -76,7 +87,7 @@ export default defineConfig({
     new HtmlRspackPlugin({
       template: "./public/index.html",
     }),
-    isDev ? new ReactRefreshRspackPlugin() : null,
+    enableReactRefresh ? new ReactRefreshRspackPlugin() : null,
   ],
   optimization: {
     runtimeChunk: "single",

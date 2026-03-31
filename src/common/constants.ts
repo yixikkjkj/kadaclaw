@@ -1,5 +1,6 @@
 export const ROUTE_PATHS = {
   workspace: "/workspace",
+  chat: "/chat",
   skills: "/skills",
   installed: "/installed",
   settings: "/settings",

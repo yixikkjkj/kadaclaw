@@ -11,11 +11,7 @@ interface RouteStatusCardProps {
   message: string;
 }
 
-export function RouteStatusCard({
-  mode,
-  title,
-  message,
-}: RouteStatusCardProps) {
+export function RouteStatusCard({ mode, title, message }: RouteStatusCardProps) {
   const [showDelayedHint, setShowDelayedHint] = useState(false);
 
   useEffect(() => {
@@ -34,9 +30,7 @@ export function RouteStatusCard({
   }, [mode]);
 
   return (
-    <Card
-      className={[styles.bootstrapCard, styles.routeStatusCard].join(" ")}
-    >
+    <Card className={[styles.bootstrapCard, styles.routeStatusCard].join(" ")}>
       <Flex vertical gap={16}>
         <Flex vertical gap={10}>
           {mode === "loading" ? <Spin /> : null}
@@ -75,9 +69,11 @@ export function RouteStatusCard({
           <Button type="primary" onClick={() => window.location.reload()}>
             刷新当前页面
           </Button>
-          <Button onClick={() => {
-            window.location.hash = `#${ROUTE_PATHS.skills}`;
-          }}>
+          <Button
+            onClick={() => {
+              window.location.hash = `#${ROUTE_PATHS.skills}`;
+            }}
+          >
             返回技能中心
           </Button>
         </Flex>

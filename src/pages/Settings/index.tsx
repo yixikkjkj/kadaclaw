@@ -13,7 +13,7 @@ import {
   Select,
   Switch,
   Tag,
-  Typography
+  Typography,
 } from "antd";
 import dayjs from "dayjs";
 import { useEffect, useState } from "react";
@@ -48,10 +48,25 @@ interface OpenClawAuthFormValues {
 }
 
 const providerOptions = [
-  { label: "Anthropic", value: "anthropic", env: "ANTHROPIC_API_KEY", model: "anthropic/claude-opus-4-6" },
+  {
+    label: "Anthropic",
+    value: "anthropic",
+    env: "ANTHROPIC_API_KEY",
+    model: "anthropic/claude-opus-4-6",
+  },
   { label: "OpenAI", value: "openai", env: "OPENAI_API_KEY", model: "openai/gpt-5.2" },
-  { label: "OpenRouter", value: "openrouter", env: "OPENROUTER_API_KEY", model: "openrouter/openai/gpt-5.2" },
-  { label: "DeepSeek", value: "deepseek", env: "DEEPSEEK_API_KEY", model: "deepseek/deepseek-chat" },
+  {
+    label: "OpenRouter",
+    value: "openrouter",
+    env: "OPENROUTER_API_KEY",
+    model: "openrouter/openai/gpt-5.2",
+  },
+  {
+    label: "DeepSeek",
+    value: "deepseek",
+    env: "DEEPSEEK_API_KEY",
+    model: "deepseek/deepseek-chat",
+  },
   { label: "Google", value: "google", env: "GEMINI_API_KEY", model: "google/gemini-2.5-pro" },
 ];
 
@@ -270,8 +285,8 @@ export function SettingsPage() {
               内置 OpenClaw 管理中心
             </Title>
             <Paragraph className={styles.heroCopy}>
-              安装、升级、探测和高级配置都集中在这里。目标不是暴露更多复杂度，而是把 OpenClaw 的运行时管理真正收进 Kadaclaw
-              客户端。
+              安装、升级、探测和高级配置都集中在这里。目标不是暴露更多复杂度，而是把 OpenClaw
+              的运行时管理真正收进 Kadaclaw 客户端。
             </Paragraph>
             <Flex gap={8} wrap style={{ marginBottom: 8 }}>
               <Button type="primary" loading={loading} onClick={() => void installBundledRuntime()}>
@@ -344,7 +359,8 @@ export function SettingsPage() {
 
       <Card title="OpenClaw Runtime 配置">
         <Paragraph type="secondary">
-          默认情况下 Kadaclaw 会托管内置 runtime。这里保留高级入口，方便你覆盖默认端口、模型和启动参数。
+          默认情况下 Kadaclaw 会托管内置
+          runtime。这里保留高级入口，方便你覆盖默认端口、模型和启动参数。
         </Paragraph>
 
         <Form form={form} layout="vertical" initialValues={{ enabled: true }}>
@@ -406,7 +422,11 @@ export function SettingsPage() {
           <Alert
             type={authConfig?.apiKeyConfigured ? "success" : "warning"}
             showIcon
-            message={authConfig?.apiKeyConfigured ? "当前 Provider 已配置授权" : "当前 Provider 尚未配置授权"}
+            message={
+              authConfig?.apiKeyConfigured
+                ? "当前 Provider 已配置授权"
+                : "当前 Provider 尚未配置授权"
+            }
             description={
               authConfig
                 ? `当前模型为 ${authConfig.model}，OpenClaw 会读取 ${authConfig.apiKeyEnvName}。`
@@ -478,9 +498,13 @@ export function SettingsPage() {
           </Form>
 
           <Descriptions column={1} size="small">
-            <Descriptions.Item label="当前 Provider">{authConfig?.provider ?? "--"}</Descriptions.Item>
+            <Descriptions.Item label="当前 Provider">
+              {authConfig?.provider ?? "--"}
+            </Descriptions.Item>
             <Descriptions.Item label="当前模型">{authConfig?.model ?? "--"}</Descriptions.Item>
-            <Descriptions.Item label="读取环境变量">{authConfig?.apiKeyEnvName ?? "--"}</Descriptions.Item>
+            <Descriptions.Item label="读取环境变量">
+              {authConfig?.apiKeyEnvName ?? "--"}
+            </Descriptions.Item>
             <Descriptions.Item label="授权状态">
               {authConfig?.apiKeyConfigured ? "已配置" : "未配置"}
             </Descriptions.Item>

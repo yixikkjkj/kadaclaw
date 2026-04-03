@@ -12,10 +12,11 @@ import {
   Tag,
   Typography,
 } from "antd";
+import { getSkillBlueprint } from "~/common/ecommerce";
 import { useSkillStore } from "~/store";
 import styles from "./index.css";
 
-const { Paragraph } = Typography;
+const { Paragraph, Text } = Typography;
 
 export function InstalledPage() {
   const openSkill = useSkillStore((state) => state.openSkill);
@@ -31,28 +32,27 @@ export function InstalledPage() {
       <Row gutter={[16, 16]}>
         <Col xs={24} md={8}>
           <Card>
-            <Statistic title="已安装技能" value={installedSkills.length} suffix="个" />
+            <Statistic title="已启用能力" value={installedSkills.length} suffix="个" />
           </Card>
         </Col>
         <Col xs={24} md={8}>
           <Card>
-            <Statistic title="OpenClaw 已识别" value={recognizedSkillIds.length} suffix="个" />
+            <Statistic title="已识别能力" value={recognizedSkillIds.length} suffix="个" />
           </Card>
         </Col>
         <Col xs={24} md={8}>
           <Card>
-            <Statistic title="可直接使用" value={readySkillIds.length} suffix="个" />
+            <Statistic title="可直接调用" value={readySkillIds.length} suffix="个" />
           </Card>
         </Col>
       </Row>
 
-      <Card title="已安装技能">
+      <Card title="已启用经营能力">
         {skillOperationError ? (
           <Alert type="error" showIcon message={skillOperationError} style={{ marginBottom: 16 }} />
         ) : null}
         <Paragraph type="secondary">
-          这里展示的是已经写入 Kadaclaw 管理目录的本地技能清单，内容来自实际
-          manifest，而不是前端演示数据。
+          这里展示的是当前工作台已启用的本地经营能力。只有被 OpenClaw 识别并就绪的能力，才能在对话中直接调用。
         </Paragraph>
         <List
           dataSource={installedSkills}
@@ -62,6 +62,11 @@ export function InstalledPage() {
           renderItem={(skill) => {
             const operation = skillOperations[skill.id];
             const busy = Boolean(operation);
+            const blueprint = getSkillBlueprint({
+              id: skill.id,
+              name: skill.name,
+              category: skill.category,
+            });
             return (
               <List.Item
                 actions={[
@@ -90,11 +95,19 @@ export function InstalledPage() {
                     </div>
                   }
                   title={skill.name}
-                  description={`${skill.summary} · ${skill.version}`}
+                  description={
+                    <Flex vertical gap={6}>
+                      <Text>{skill.summary}</Text>
+                      <Text type="secondary">
+                        {blueprint?.summary ?? `${skill.category} 场景经营能力`} · {skill.version}
+                      </Text>
+                    </Flex>
+                  }
                 />
                 <Flex gap={8} wrap>
                   <Tag color="gold">{skill.category}</Tag>
                   <Tag>{skill.author}</Tag>
+                  {blueprint?.platforms.map((platform) => <Tag key={platform}>{platform}</Tag>)}
                   {recognizedSkillIds.includes(skill.id) ? (
                     <Tag color={readySkillIds.includes(skill.id) ? "blue" : "orange"}>
                       {readySkillIds.includes(skill.id) ? "已识别并就绪" : "已识别"}
@@ -107,7 +120,10 @@ export function InstalledPage() {
         />
       </Card>
 
-      <Card title="本地落盘信息">
+      <Card title="技术详情">
+        <Paragraph type="secondary">
+          本区域保留实际落盘信息，方便核对 manifest、目录和版本，避免业务能力与本地安装状态脱节。
+        </Paragraph>
         <Row gutter={[16, 16]}>
           {installedSkills.map((skill) => (
             <Col xs={24} md={12} key={skill.id}>

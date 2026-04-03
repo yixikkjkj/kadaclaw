@@ -1,5 +1,4 @@
 export const ROUTE_PATHS = {
-  workspace: "/workspace",
   chat: "/chat",
   skills: "/skills",
   installed: "/installed",
@@ -8,38 +7,42 @@ export const ROUTE_PATHS = {
 
 export type AppRoutePath = (typeof ROUTE_PATHS)[keyof typeof ROUTE_PATHS];
 
-export interface ActivityRecord {
-  id: string;
-  title: string;
-  skillName: string;
-  status: "成功" | "运行中" | "需处理";
-  updatedAt: string;
-  owner: string;
+export interface OpenClawProviderOption {
+  label: string;
+  value: string;
+  env: string;
+  model: string;
 }
 
-export const activityRecords: ActivityRecord[] = [
+export const OPENCLAW_PROVIDER_OPTIONS: OpenClawProviderOption[] = [
   {
-    id: "act-1",
-    title: "新能源行业分析草案",
-    skillName: "深度研究",
-    status: "成功",
-    updatedAt: "今天 14:20",
-    owner: "产品策略组",
+    label: "Anthropic",
+    value: "anthropic",
+    env: "ANTHROPIC_API_KEY",
+    model: "anthropic/claude-opus-4-6",
   },
   {
-    id: "act-2",
-    title: "客户端仓库发布前检查",
-    skillName: "代码库审计",
-    status: "运行中",
-    updatedAt: "今天 13:42",
-    owner: "桌面端工程",
+    label: "OpenAI",
+    value: "openai",
+    env: "OPENAI_API_KEY",
+    model: "openai/gpt-5.2",
   },
   {
-    id: "act-3",
-    title: "四月活动选题排期",
-    skillName: "内容流水线",
-    status: "需处理",
-    updatedAt: "昨天 18:10",
-    owner: "内容运营",
+    label: "OpenRouter",
+    value: "openrouter",
+    env: "OPENROUTER_API_KEY",
+    model: "openrouter/openai/gpt-5.2",
+  },
+  {
+    label: "DeepSeek",
+    value: "deepseek",
+    env: "DEEPSEEK_API_KEY",
+    model: "deepseek/deepseek-chat",
+  },
+  {
+    label: "Google",
+    value: "google",
+    env: "GEMINI_API_KEY",
+    model: "google/gemini-2.5-pro",
   },
 ];

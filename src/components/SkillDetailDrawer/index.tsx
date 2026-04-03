@@ -1,6 +1,8 @@
 import { Alert, Button, Card, Descriptions, Drawer, Flex, Tag, Typography } from "antd";
 import { useMemo } from "react";
+import { getSkillBlueprint } from "~/common/ecommerce";
 import { useSkillStore } from "~/store";
+import styles from "./index.css";
 
 const { Paragraph, Text } = Typography;
 
@@ -18,6 +20,15 @@ export function SkillDetailDrawer() {
     () => installedSkills.find((item) => item.id === selectedSkillId) ?? null,
     [installedSkills, selectedSkillId],
   );
+  const blueprint = useMemo(
+    () =>
+      getSkillBlueprint({
+        id: selectedSkillId ?? undefined,
+        name: installedSummary?.name,
+        category: installedSummary?.category,
+      }),
+    [installedSummary?.category, installedSummary?.name, selectedSkillId],
+  );
 
   if (!selectedSkillId) {
     return null;
@@ -26,8 +37,9 @@ export function SkillDetailDrawer() {
   const installed = installedSkillIds.includes(selectedSkillId);
   const operation = skillOperations[selectedSkillId];
   const busy = Boolean(operation);
-  const displayName = installedSummary?.name ?? selectedSkillId;
-  const displaySummary = installedSummary?.summary ?? "暂无技能说明。";
+  const displayName = installedSummary?.name ?? blueprint?.title ?? selectedSkillId;
+  const displaySummary =
+    blueprint?.summary ?? installedSummary?.summary ?? "暂无能力说明，后续会补充更详细的业务说明。";
 
   return (
     <Drawer
@@ -36,42 +48,97 @@ export function SkillDetailDrawer() {
       title={displayName}
       onClose={closeSkill}
       extra={
-        <Button
-          type="primary"
-          loading={busy}
-          disabled={busy || !installed}
-          onClick={() =>
-            void removeInstalledSkill(selectedSkillId, displayName).then((removed) => {
-              if (removed) {
-                closeSkill();
-              }
-            })
-          }
-        >
-          {operation === "removing" ? "正在移除" : "移除技能"}
-        </Button>
+        installed ? (
+          <Button
+            type="primary"
+            loading={busy}
+            disabled={busy}
+            onClick={() =>
+              void removeInstalledSkill(selectedSkillId, displayName).then((removed) => {
+                if (removed) {
+                  closeSkill();
+                }
+              })
+            }
+          >
+            {operation === "removing" ? "正在移除" : "移除能力"}
+          </Button>
+        ) : null
       }
     >
       <Flex vertical gap={20}>
         {skillOperationError ? <Alert type="error" showIcon message={skillOperationError} /> : null}
-        {!installedSummary ? (
-          <Alert type="warning" showIcon message="当前只保留本地技能信息，未找到对应记录。" />
+        {!installed ? (
+          <Alert
+            type="info"
+            showIcon
+            message="当前能力尚未启用"
+            description="你可以先查看适用平台、输入要求和示例提问，再决定是否接入对应能力。"
+          />
         ) : null}
 
         <Flex gap={8} wrap>
-          <Tag color="green">v{installedSummary?.version ?? "unknown"}</Tag>
-          <Tag>{installedSummary?.author ?? "本地技能"}</Tag>
-          {installedSummary ? <Tag color="gold">{installedSummary.category}</Tag> : null}
+          <Tag color="green">v{installedSummary?.version ?? "preview"}</Tag>
+          <Tag>{installedSummary?.author ?? "预置能力"}</Tag>
+          <Tag color="gold">{blueprint?.category ?? installedSummary?.category ?? "经营能力"}</Tag>
+          {installed ? <Tag color="blue">已启用</Tag> : <Tag>待启用</Tag>}
         </Flex>
 
         <Paragraph>{displaySummary}</Paragraph>
 
-        <Card title="本地概览">
+        {blueprint ? (
+          <Card title="业务说明">
+            <Flex vertical gap={16}>
+              <div>
+                <Text strong>适用平台</Text>
+                <div className={styles.tagGroup}>
+                  {blueprint.platforms.map((platform) => (
+                    <Tag key={platform}>{platform}</Tag>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <Text strong>适用场景</Text>
+                <div className={styles.tagGroup}>
+                  {blueprint.scenes.map((scene) => (
+                    <Tag key={scene} color="gold">
+                      {scene}
+                    </Tag>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <Text strong>建议准备的上下文</Text>
+                <div className={styles.tagGroup}>
+                  {blueprint.requiredContexts.map((item) => (
+                    <Tag key={item} color="blue">
+                      {item}
+                    </Tag>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <Text strong>推荐提问</Text>
+                <Flex vertical gap={8} className={styles.promptList}>
+                  {blueprint.examplePrompts.map((item) => (
+                    <Paragraph key={item} className={styles.promptItem}>
+                      {item}
+                    </Paragraph>
+                  ))}
+                </Flex>
+              </div>
+            </Flex>
+          </Card>
+        ) : null}
+
+        <Card title="技术概览">
           <Descriptions column={1} size="small">
             <Descriptions.Item label="技能 ID">{selectedSkillId}</Descriptions.Item>
             <Descriptions.Item label="版本">{installedSummary?.version ?? "--"}</Descriptions.Item>
             <Descriptions.Item label="作者">{installedSummary?.author ?? "--"}</Descriptions.Item>
-            <Descriptions.Item label="分类">{installedSummary?.category ?? "--"}</Descriptions.Item>
+            <Descriptions.Item label="分类">
+              {blueprint?.category ?? installedSummary?.category ?? "--"}
+            </Descriptions.Item>
             {installedSummary ? (
               <Descriptions.Item label="Manifest">
                 {installedSummary.manifestPath}
@@ -85,8 +152,7 @@ export function SkillDetailDrawer() {
 
         <Card title="状态说明">
           <Text type="secondary">
-            公共 ClawHub 市场接入已移除。这里现在只展示本地已安装技能信息，后续会在这一块接入私有
-            Skillshub。
+            当前版本优先使用本地和私有经营能力。后续会在这一块补平台接入状态、最近调用次数和上下文要求。
           </Text>
         </Card>
       </Flex>

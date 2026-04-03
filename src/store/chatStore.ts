@@ -8,23 +8,7 @@ import {
   stopOpenClawMessage,
   type ChatHistoryState,
 } from "~/api";
-
-export type ChatRole = "user" | "assistant" | "system";
-
-export interface ChatMessage {
-  id: string;
-  role: ChatRole;
-  content: string;
-  createdAt: string;
-}
-
-export interface ChatSession {
-  id: string;
-  title: string;
-  createdAt: string;
-  updatedAt: string;
-  messages: ChatMessage[];
-}
+import { type ChatMessage, type ChatRole, type ChatSession } from "~/types";
 
 const initialChatSessionId = "kadaclaw-main";
 
@@ -33,7 +17,7 @@ const createInitialChatMessages = (timestamp: string): ChatMessage[] => [
     id: `welcome-${timestamp}`,
     role: "assistant",
     content:
-      "这里是 Kadaclaw 内置的 OpenClaw 聊天窗口。发送消息后，应用会直接把当前会话交给本地 OpenClaw runtime。",
+      "这里是 Kadaclaw 内置经营助手。你可以结合当前平台、场景和时间范围，直接提出经营问题。",
     createdAt: timestamp,
   },
 ];

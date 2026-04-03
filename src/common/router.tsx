@@ -7,7 +7,6 @@ import { ChatPage } from "~/pages/Chat";
 import { InstalledPage } from "~/pages/Installed";
 import { SettingsPage } from "~/pages/Settings";
 import { SkillsPage } from "~/pages/Skills";
-import { WorkspacePage } from "~/pages/Workspace";
 
 const RouteErrorElement = () => {
   const error = useRouteError();
@@ -32,10 +31,6 @@ export const router = createHashRouter([
           {
             index: true,
             element: <Navigate to={ROUTE_PATHS.skills} replace />,
-          },
-          {
-            path: ROUTE_PATHS.workspace.slice(1),
-            element: <WorkspacePage />,
           },
           {
             path: ROUTE_PATHS.chat.slice(1),

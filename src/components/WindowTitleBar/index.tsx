@@ -3,24 +3,11 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { MenuUnfoldOutlined, PlusOutlined } from "@ant-design/icons";
 import { Button, Flex, Tooltip, Typography } from "antd";
 import { type MouseEvent } from "react";
+import { getRuntimeLabel } from "~/common/runtime";
 import { useChatStore, useLayoutStore, useRuntimeStore } from "~/store";
 import styles from "./index.css";
 
 const { Text } = Typography;
-
-const getRuntimeLabel = (runtimeStatus: "idle" | "checking" | "ready" | "error") => {
-  if (runtimeStatus === "ready") {
-    return "Runtime 已就绪";
-  }
-  if (runtimeStatus === "checking") {
-    return "Runtime 检测中";
-  }
-  if (runtimeStatus === "error") {
-    return "Runtime 异常";
-  }
-
-  return "Runtime 待启动";
-};
 
 export const WindowTitleBar = () => {
   const collapseSidebar = useLayoutStore((state) => state.collapseSidebar);

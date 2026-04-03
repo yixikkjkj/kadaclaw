@@ -8,20 +8,19 @@ import { BootstrappingScreen, OnboardingModal } from "~/components";
 import { getErrorMessage } from "~/common/utils";
 import {
   ensureOpenClawRuntime,
+  getOpenClawActiveStream,
   getOpenClawRuntimeInfo,
   installBundledOpenClawRuntime,
   launchOpenClawRuntime,
 } from "~/api";
 import { useChatStore, useRuntimeStore, useSkillStore } from "~/store";
-import styles from "./AppRoot.css";
 
 export const AppRoot = () => {
-  const runtimeMessage = useRuntimeStore((state) => state.runtimeMessage);
-  const runtimeStatus = useRuntimeStore((state) => state.runtimeStatus);
   const setRuntimeState = useRuntimeStore((state) => state.setRuntimeState);
   const refreshInstalledSkills = useSkillStore((state) => state.refreshInstalledSkills);
   const hydrateChatHistory = useChatStore((state) => state.hydrateChatHistory);
   const hydrateActiveStream = useChatStore((state) => state.hydrateActiveStream);
+  const streamingRunning = useChatStore((state) => state.streamingRunning);
   const updateStreamingReply = useChatStore((state) => state.updateStreamingReply);
   const [bootstrapping, setBootstrapping] = useState(true);
   const [showOnboarding, setShowOnboarding] = useState(false);
@@ -102,20 +101,52 @@ export const AppRoot = () => {
 
     void listen<{ sessionId: string; content: string }>("openclaw://chat-stream", (event) => {
       updateStreamingReply(event.payload.sessionId, event.payload.content);
-    }).then((nextUnlisten) => {
-      if (disposed) {
-        nextUnlisten();
-        return;
-      }
+    })
+      .then((nextUnlisten) => {
+        if (disposed) {
+          nextUnlisten();
+          return;
+        }
 
-      unlisten = nextUnlisten;
-    });
+        unlisten = nextUnlisten;
+      })
+      .catch((reason) => {
+        console.error("订阅 OpenClaw 流式事件失败", reason);
+      });
 
     return () => {
       disposed = true;
       unlisten?.();
     };
   }, [hydrateActiveStream, updateStreamingReply]);
+
+  useEffect(() => {
+    if (!isTauri() || !streamingRunning) {
+      return;
+    }
+
+    let disposed = false;
+    const timer = window.setInterval(() => {
+      void getOpenClawActiveStream()
+        .then((snapshot) => {
+          if (disposed || !snapshot) {
+            return;
+          }
+
+          updateStreamingReply(snapshot.sessionId, snapshot.content);
+        })
+        .catch((reason) => {
+          if (!disposed) {
+            console.error("轮询 OpenClaw 流式状态失败", reason);
+          }
+        });
+    }, 120);
+
+    return () => {
+      disposed = true;
+      window.clearInterval(timer);
+    };
+  }, [streamingRunning, updateStreamingReply]);
 
   useEffect(() => {
     if (bootstrapStartedRef.current) {
@@ -167,15 +198,9 @@ export const AppRoot = () => {
   return (
     <>
       {shouldRenderRouter ? <RouterProvider router={router} /> : null}
-      {bootstrapping ? (
-        <div className={styles.bootstrapLayer}>
-          <BootstrappingScreen runtimeMessage={runtimeMessage} runtimeStatus={runtimeStatus} />
-        </div>
-      ) : null}
+      {bootstrapping ? <BootstrappingScreen /> : null}
       <OnboardingModal
         open={showOnboarding}
-        runtimeStatus={runtimeStatus}
-        runtimeMessage={runtimeMessage}
         installDir={runtimeInstallDir}
         loading={onboardingLoading}
         onInstall={runOnboardingInstall}

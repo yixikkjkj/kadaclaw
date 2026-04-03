@@ -5,7 +5,6 @@ import {
   MenuUnfoldOutlined,
   MessageOutlined,
   PlusOutlined,
-  RocketOutlined,
   SettingOutlined,
 } from "@ant-design/icons";
 import { Button, Flex, Layout, Menu, MenuProps, Popconfirm, Tooltip, Typography } from "antd";
@@ -68,83 +67,85 @@ export const Sidebar = () => {
   const now = dayjs();
   const todayStart = now.startOf("day");
   const sevenDaysAgo = todayStart.subtract(7, "day");
+  const monthStart = now.startOf("month");
+  const sessionGroups = sortedChatSessions.reduce(
+    (groups, session) => {
+      const updatedAt = dayjs(session.updatedAt);
 
-  const sessionsToday = sortedChatSessions.filter((session) => {
-    const updatedAt = dayjs(session.updatedAt);
-    return updatedAt.isValid() && updatedAt.isSame(now, "day");
-  });
-  const sessionsLastSevenDays = sortedChatSessions.filter((session) => {
-    const updatedAt = dayjs(session.updatedAt);
+      if (!updatedAt.isValid()) {
+        groups.earlier.push(session);
+        return groups;
+      }
 
-    if (!updatedAt.isValid()) {
-      return false;
-    }
+      if (updatedAt.isSame(now, "day")) {
+        groups.today.push(session);
+        return groups;
+      }
 
-    return (
-      updatedAt.valueOf() >= sevenDaysAgo.valueOf() &&
-      updatedAt.valueOf() < todayStart.valueOf() &&
-      !updatedAt.isSame(now, "day")
-    );
-  });
-  const sessionsThisMonth = sortedChatSessions.filter((session) => {
-    const updatedAt = dayjs(session.updatedAt);
+      if (
+        updatedAt.valueOf() >= sevenDaysAgo.valueOf() &&
+        updatedAt.valueOf() < todayStart.valueOf()
+      ) {
+        groups.lastSevenDays.push(session);
+        return groups;
+      }
 
-    if (!updatedAt.isValid()) {
-      return false;
-    }
+      if (updatedAt.valueOf() >= monthStart.valueOf()) {
+        groups.thisMonth.push(session);
+        return groups;
+      }
 
-    return updatedAt.isSame(now, "month") && updatedAt.valueOf() < sevenDaysAgo.valueOf();
-  });
-  const sessionsEarlier = sortedChatSessions.filter((session) => {
-    const updatedAt = dayjs(session.updatedAt);
-
-    if (!updatedAt.isValid()) {
-      return true;
-    }
-
-    return !updatedAt.isSame(now, "month");
-  });
+      groups.earlier.push(session);
+      return groups;
+    },
+    {
+      today: [] as typeof sortedChatSessions,
+      lastSevenDays: [] as typeof sortedChatSessions,
+      thisMonth: [] as typeof sortedChatSessions,
+      earlier: [] as typeof sortedChatSessions,
+    },
+  );
 
   const chatMenuItems: NonNullable<MenuProps["items"]> = [
-    ...(sessionsToday.length > 0
+    ...(sessionGroups.today.length > 0
       ? [
           {
             type: "group" as const,
             label: "今天",
-            children: sessionsToday.map((session) =>
+            children: sessionGroups.today.map((session) =>
               buildChatMenuItem(session.id, session.title, deleteSession),
             ),
           },
         ]
       : []),
-    ...(sessionsLastSevenDays.length > 0
+    ...(sessionGroups.lastSevenDays.length > 0
       ? [
           {
             type: "group" as const,
             label: "近 7 天",
-            children: sessionsLastSevenDays.map((session) =>
+            children: sessionGroups.lastSevenDays.map((session) =>
               buildChatMenuItem(session.id, session.title, deleteSession),
             ),
           },
         ]
       : []),
-    ...(sessionsThisMonth.length > 0
+    ...(sessionGroups.thisMonth.length > 0
       ? [
           {
             type: "group" as const,
             label: "本月",
-            children: sessionsThisMonth.map((session) =>
+            children: sessionGroups.thisMonth.map((session) =>
               buildChatMenuItem(session.id, session.title, deleteSession),
             ),
           },
         ]
       : []),
-    ...(sessionsEarlier.length > 0
+    ...(sessionGroups.earlier.length > 0
       ? [
           {
             type: "group" as const,
             label: "更早",
-            children: sessionsEarlier.map((session) =>
+            children: sessionGroups.earlier.map((session) =>
               buildChatMenuItem(session.id, session.title, deleteSession),
             ),
           },
@@ -152,9 +153,8 @@ export const Sidebar = () => {
       : []),
   ];
   const bottomMenuItems: NonNullable<MenuProps["items"]> = [
-    { key: ROUTE_PATHS.workspace, icon: <RocketOutlined />, label: "工作台" },
-    { key: ROUTE_PATHS.skills, icon: <AppstoreOutlined />, label: "技能中心" },
-    { key: ROUTE_PATHS.installed, icon: <CloudDownloadOutlined />, label: "已安装" },
+    { key: ROUTE_PATHS.skills, icon: <AppstoreOutlined />, label: "场景中心" },
+    { key: ROUTE_PATHS.installed, icon: <CloudDownloadOutlined />, label: "已启用" },
     { key: ROUTE_PATHS.settings, icon: <SettingOutlined />, label: "设置" },
   ];
   const selectedKey =

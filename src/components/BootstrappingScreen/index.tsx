@@ -1,24 +1,19 @@
-import { Card, Flex, Progress, Spin, Typography } from "antd";
-import styles from "./index.css";
+import { Flex, Progress, Spin, Typography } from "antd";
+import { getRuntimeProgressPercent } from "~/common/runtime";
+import { useRuntimeStore } from "~/store";
 
 const { Text } = Typography;
 
-interface BootstrappingScreenProps {
-  runtimeMessage: string;
-  runtimeStatus: "idle" | "checking" | "ready" | "error";
-}
-
-export function BootstrappingScreen({ runtimeMessage, runtimeStatus }: BootstrappingScreenProps) {
+export const BootstrappingScreen = () => {
+  const runtimeMessage = useRuntimeStore((state) => state.runtimeMessage);
+  const runtimeStatus = useRuntimeStore((state) => state.runtimeStatus);
   return (
-    <Card className={styles.bootstrapCard}>
-      <Flex vertical gap={16}>
+    <Flex style={{ width: "100vw", height: "100vh" }} align="center" justify="center">
+      <Flex vertical gap={16} style={{ width: 400 }} align="center" justify="center">
         <Spin />
         <Text type="secondary">{runtimeMessage}</Text>
-        <Progress
-          percent={runtimeStatus === "ready" ? 100 : runtimeStatus === "checking" ? 68 : 32}
-          showInfo={false}
-        />
+        <Progress showInfo={false} percent={getRuntimeProgressPercent(runtimeStatus)} />
       </Flex>
-    </Card>
+    </Flex>
   );
-}
+};

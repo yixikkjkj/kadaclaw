@@ -1,9 +1,10 @@
 import { create } from "zustand";
+import { type RuntimeStatus } from "~/types";
 
 interface RuntimeState {
-  runtimeStatus: "idle" | "checking" | "ready" | "error";
+  runtimeStatus: RuntimeStatus;
   runtimeMessage: string;
-  setRuntimeState: (status: RuntimeState["runtimeStatus"], message: string) => void;
+  setRuntimeState: (status: RuntimeStatus, message: string) => void;
 }
 
 export const useRuntimeStore = create<RuntimeState>((set) => ({

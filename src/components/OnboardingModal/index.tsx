@@ -1,5 +1,7 @@
 import { Alert, Badge, Button, Card, Flex, Modal, Typography } from "antd";
+import { getRuntimeBadgeStatus } from "~/common/runtime";
 import styles from "./index.css";
+import { useRuntimeStore } from "~/store";
 
 const { Paragraph, Text } = Typography;
 
@@ -9,8 +11,6 @@ function isWindowsHost() {
 
 interface OnboardingModalProps {
   open: boolean;
-  runtimeStatus: "idle" | "checking" | "ready" | "error";
-  runtimeMessage: string;
   installDir?: string | null;
   loading: boolean;
   onInstall: () => void;
@@ -20,8 +20,6 @@ interface OnboardingModalProps {
 
 export function OnboardingModal({
   open,
-  runtimeStatus,
-  runtimeMessage,
   installDir,
   loading,
   onInstall,
@@ -29,6 +27,8 @@ export function OnboardingModal({
   onAdvanced,
 }: OnboardingModalProps) {
   const windowsHost = isWindowsHost();
+  const runtimeMessage = useRuntimeStore((state) => state.runtimeMessage);
+  const runtimeStatus = useRuntimeStore((state) => state.runtimeStatus);
 
   return (
     <Modal open={open} closable={false} footer={null} width={760} title="首次启动">
@@ -39,16 +39,7 @@ export function OnboardingModal({
         </Paragraph>
         <Card className={styles.innerCard}>
           <Flex vertical gap={10}>
-            <Badge
-              status={
-                runtimeStatus === "ready"
-                  ? "success"
-                  : runtimeStatus === "checking"
-                    ? "processing"
-                    : "error"
-              }
-              text={runtimeMessage}
-            />
+            <Badge status={getRuntimeBadgeStatus(runtimeStatus)} text={runtimeMessage} />
             <Text type="secondary">
               安装目标目录：
               <Text code>{installDir ?? "<应用本地数据目录>/openclaw-runtime"}</Text>

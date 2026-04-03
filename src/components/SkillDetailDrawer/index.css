@@ -1,0 +1,17 @@
+.tagGroup {
+  margin-top: 10px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.promptList {
+  margin-top: 10px;
+}
+
+.promptItem {
+  margin-bottom: 0;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(15, 123, 108, 0.06);
+}

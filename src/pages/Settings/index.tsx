@@ -17,6 +17,8 @@ import {
 } from "antd";
 import dayjs from "dayjs";
 import { useEffect, useState } from "react";
+import { COMMERCE_PLATFORM_OPTIONS } from "~/common/ecommerce";
+import { OPENCLAW_PROVIDER_OPTIONS } from "~/common/constants";
 import {
   getOpenClawAuthConfig,
   getOpenClawConfig,
@@ -32,7 +34,8 @@ import {
   saveOpenClawConfig,
   upgradeBundledOpenClawRuntime,
 } from "~/api";
-import { useRuntimeStore } from "~/store";
+import { useConnectorStore, useRuntimeStore } from "~/store";
+import { type CommercePlatform } from "~/types";
 import styles from "./index.css";
 
 const { Paragraph, Text, Title } = Typography;
@@ -47,28 +50,11 @@ interface OpenClawAuthFormValues {
   apiKey: string;
 }
 
-const providerOptions = [
-  {
-    label: "Anthropic",
-    value: "anthropic",
-    env: "ANTHROPIC_API_KEY",
-    model: "anthropic/claude-opus-4-6",
-  },
-  { label: "OpenAI", value: "openai", env: "OPENAI_API_KEY", model: "openai/gpt-5.2" },
-  {
-    label: "OpenRouter",
-    value: "openrouter",
-    env: "OPENROUTER_API_KEY",
-    model: "openrouter/openai/gpt-5.2",
-  },
-  {
-    label: "DeepSeek",
-    value: "deepseek",
-    env: "DEEPSEEK_API_KEY",
-    model: "deepseek/deepseek-chat",
-  },
-  { label: "Google", value: "google", env: "GEMINI_API_KEY", model: "google/gemini-2.5-pro" },
-];
+interface PlatformConnectionFormValues {
+  platform: CommercePlatform;
+  shopName: string;
+  credential: string;
+}
 
 function isWindowsHost() {
   return typeof navigator !== "undefined" && /windows/i.test(navigator.userAgent);
@@ -98,13 +84,20 @@ function formatCheckTime(value?: number | null) {
 export function SettingsPage() {
   const [form] = Form.useForm<OpenClawFormValues>();
   const [authForm] = Form.useForm<OpenClawAuthFormValues>();
+  const [platformForm] = Form.useForm<PlatformConnectionFormValues>();
   const [runtimeStatus, setRuntimeStatus] = useState<OpenClawStatus | null>(null);
   const [runtimeInfo, setRuntimeInfo] = useState<RuntimeInfoResult | null>(null);
   const [selfCheckResult, setSelfCheckResult] = useState<OpenClawSelfCheckResult | null>(null);
   const [authConfig, setAuthConfig] = useState<OpenClawAuthConfig | null>(null);
   const [loading, setLoading] = useState(false);
   const setRuntimeState = useRuntimeStore((state) => state.setRuntimeState);
+  const selectedConnectorPlatform = useConnectorStore((state) => state.selectedPlatform);
+  const connections = useConnectorStore((state) => state.connections);
+  const setSelectedConnectorPlatform = useConnectorStore((state) => state.setSelectedPlatform);
+  const saveConnection = useConnectorStore((state) => state.saveConnection);
+  const removeConnection = useConnectorStore((state) => state.removeConnection);
   const windowsHost = isWindowsHost();
+  const selectedConnection = connections[selectedConnectorPlatform];
 
   const refreshRuntimeInfo = async () => {
     try {
@@ -141,7 +134,15 @@ export function SettingsPage() {
         message.error(`读取授权配置失败: ${String(error)}`);
       }
     })();
-  }, [authForm, form]);
+  }, [authForm, form, platformForm]);
+
+  useEffect(() => {
+    platformForm.setFieldsValue({
+      platform: selectedConnectorPlatform,
+      shopName: selectedConnection?.shopName ?? "",
+      credential: selectedConnection?.credential ?? "",
+    });
+  }, [platformForm, selectedConnection, selectedConnectorPlatform]);
 
   const performSelfCheck = async (options?: { showSuccessMessage?: boolean }) => {
     const showSuccessMessage = options?.showSuccessMessage ?? true;
@@ -334,6 +335,109 @@ export function SettingsPage() {
       ) : null}
 
       <Card
+        title="平台接入"
+        extra={
+          <Text type="secondary">
+            最近保存：
+            {formatCheckTime(selectedConnection?.updatedAt ?? null)}
+          </Text>
+        }
+      >
+        <Flex vertical gap={16}>
+          <Paragraph type="secondary">
+            接入店铺后，系统可以自动带入商品、订单、售后和评价上下文。当前版本先提供接入规划入口，后续再接真实同步链路。
+          </Paragraph>
+
+          <Row gutter={[16, 16]}>
+            {COMMERCE_PLATFORM_OPTIONS.map((item) => (
+              <Col xs={24} md={12} xl={6} key={item.value}>
+                <Card className={styles.connectorCard}>
+                  <Flex vertical gap={10}>
+                    <Flex align="center" justify="space-between" gap={8}>
+                      <Text strong>{item.label}</Text>
+                      {connections[item.value] ? (
+                        <Tag color="blue">已配置</Tag>
+                      ) : item.value === "taobao" ? (
+                        <Tag>优先</Tag>
+                      ) : (
+                        <Tag>规划中</Tag>
+                      )}
+                    </Flex>
+                    <Text type="secondary">{item.description}</Text>
+                  </Flex>
+                </Card>
+              </Col>
+            ))}
+          </Row>
+
+          <Alert
+            type="info"
+            showIcon
+            message="接入规划"
+            description="第一阶段先保留店铺接入入口和凭据管理位；第二阶段再接商品、订单、售后和评价同步。"
+          />
+
+          <Form form={platformForm} layout="vertical">
+            <Row gutter={[16, 0]}>
+              <Col xs={24} md={8}>
+                <Form.Item label="平台" name="platform" rules={[{ required: true }]}>
+                  <Select
+                    options={COMMERCE_PLATFORM_OPTIONS.map((item) => ({
+                      label: item.label,
+                      value: item.value,
+                    }))}
+                    onChange={setSelectedConnectorPlatform}
+                  />
+                </Form.Item>
+              </Col>
+              <Col xs={24} md={8}>
+                <Form.Item label="店铺名称" name="shopName" rules={[{ required: true }]}>
+                  <Input placeholder="例如：旗舰店 / 抖店主账号" />
+                </Form.Item>
+              </Col>
+              <Col xs={24} md={8}>
+                <Form.Item label="接入凭据" name="credential" rules={[{ required: true }]}>
+                  <Input.Password placeholder="填写 API Token、Cookie 或授权凭据" />
+                </Form.Item>
+              </Col>
+            </Row>
+            <Flex gap={8} wrap>
+              <Button
+                type="primary"
+                onClick={() =>
+                  void (async () => {
+                    try {
+                      const values = await platformForm.validateFields();
+                      saveConnection(values);
+                      message.success("平台接入配置已保存到本地工作台");
+                    } catch {
+                      // Form 校验已接管提示。
+                    }
+                  })()
+                }
+              >
+                保存接入配置
+              </Button>
+              <Button
+                onClick={() => {
+                  if (selectedConnection) {
+                    removeConnection(selectedConnectorPlatform);
+                  }
+                  platformForm.setFieldsValue({
+                    platform: selectedConnectorPlatform,
+                    shopName: "",
+                    credential: "",
+                  });
+                }}
+              >
+                清空当前平台
+              </Button>
+            </Flex>
+          </Form>
+        </Flex>
+      </Card>
+
+      <Card
         title="安装后自检"
         extra={
           <Flex align="center" gap={12}>
@@ -439,12 +543,12 @@ export function SettingsPage() {
               <Col xs={24} md={8}>
                 <Form.Item label="Provider" name="provider" rules={[{ required: true }]}>
                   <Select
-                    options={providerOptions.map((item) => ({
+                    options={OPENCLAW_PROVIDER_OPTIONS.map((item) => ({
                       label: item.label,
                       value: item.value,
                     }))}
                     onChange={(value) => {
-                      const next = providerOptions.find((item) => item.value === value);
+                      const next = OPENCLAW_PROVIDER_OPTIONS.find((item) => item.value === value);
                       if (!next) {
                         return;
                       }

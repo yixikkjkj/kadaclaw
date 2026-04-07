@@ -545,6 +545,18 @@ fn sanitize_openclaw_output(raw_output: &str) -> String {
   lines.join("\n")
 }
 
+#[cfg(target_os = "windows")]
+fn build_openclaw_command(command_path: &str) -> Command {
+  let mut command = Command::new("cmd");
+  command.arg("/C").arg(command_path);
+  command
+}
+
+#[cfg(not(target_os = "windows"))]
+fn build_openclaw_command(command_path: &str) -> Command {
+  Command::new(command_path)
+}
+
 #[cfg(target_os = "macos")]
 fn spawn_streaming_openclaw_command(
   config: &OpenClawConfig,
@@ -627,7 +639,7 @@ fn spawn_streaming_openclaw_command(
   message: &str,
   thinking: Option<String>,
 ) -> Result<Child, String> {
-  let mut command = Command::new(&config.command);
+  let mut command = build_openclaw_command(&config.command);
   command
     .arg("agent")
     .arg("--session-id")
@@ -1209,7 +1221,7 @@ fn read_openclaw_skill_registry(app: &AppHandle) -> Result<Vec<OpenClawSkillEntr
   let attempts = 3;
 
   for attempt in 0..attempts {
-    let mut command = Command::new(&config.command);
+    let mut command = build_openclaw_command(&config.command);
     command.args(["skills", "list", "--json"]);
     if !config.working_directory.is_empty() {
       command.current_dir(&config.working_directory);
@@ -1250,7 +1262,7 @@ fn read_openclaw_skill_registry(app: &AppHandle) -> Result<Vec<OpenClawSkillEntr
 }
 
 fn spawn_runtime_process(config: &OpenClawConfig) -> Result<(), String> {
-  let mut command = Command::new(&config.command);
+  let mut command = build_openclaw_command(&config.command);
   if !config.args.is_empty() {
     command.args(&config.args);
   }
@@ -1322,7 +1334,7 @@ async fn launch_openclaw_runtime(app: AppHandle) -> Result<OpenClawStatus, Strin
 #[tauri::command]
 fn get_openclaw_dashboard_url(app: AppHandle) -> Result<DashboardUrlResult, String> {
   let config = read_config(&app)?;
-  let mut command = Command::new(&config.command);
+  let mut command = build_openclaw_command(&config.command);
   command.arg("dashboard").arg("--no-open");
   if !config.working_directory.is_empty() {
     command.current_dir(&config.working_directory);
@@ -1714,12 +1726,23 @@ Write-Output ('__OPENCLAW_CMD__=' + $cmd.Source)
   })
 }
 
+fn build_version_read_suggestion(command_path: &str) -> String {
+  if cfg!(target_os = "windows") {
+    format!(
+      "确认命令路径可执行，并在 PowerShell 或 CMD 中手动运行 `\"{command_path}\" --version`；如果 Windows 原生环境下仍然失败，优先改用 WSL2。"
+    )
+  } else {
+    format!("确认命令路径可执行，并手动运行 `{command_path} --version`。")
+  }
+}
+
 fn read_openclaw_version(command_path: &str) -> Result<String, String> {
   if !executable_exists(command_path) {
     return Ok("未安装".to_string());
   }
 
-  let output = Command::new(command_path)
+  let mut command = build_openclaw_command(command_path);
+  let output = command
     .arg("--version")
     .output()
     .map_err(|error| format!("无法读取 OpenClaw 版本: {error}"))?;
@@ -1805,9 +1828,10 @@ async fn run_openclaw_self_check(app: AppHandle) -> Result<OpenClawSelfCheckResu
         .clone()
         .map(|error| format!("版本读取失败：{error}"))
         .unwrap_or_else(|| runtime_info.version.clone()),
-      suggestion: runtime_info.version_error.as_ref().map(|_| {
-        "确认命令路径可执行，并手动运行 `openclaw --version`；Windows 下若仍失败，优先改用 WSL2。".to_string()
-      }),
+      suggestion: runtime_info
+        .version_error
+        .as_ref()
+        .map(|_| build_version_read_suggestion(&runtime_info.command_path)),
     },
     OpenClawSelfCheckItem {
       key: "bundled".to_string(),

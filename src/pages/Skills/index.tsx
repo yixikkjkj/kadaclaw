@@ -1,10 +1,12 @@
-import { Button, Card, Col, Flex, Row, Statistic, Tag, Typography } from "antd";
+import { Button, Card, Col, Flex, Input, List, Row, Statistic, Tag, Typography, message } from "antd";
+import { useState } from "react";
 import { useNavigate } from "react-router";
 import {
-  PRIMARY_SKILL_BLUEPRINTS,
-  SECONDARY_SKILL_BLUEPRINTS,
-  getSkillBlueprint,
-} from "~/common/ecommerce";
+  installSkillFromDirectory,
+  installSkillFromUrl,
+  pickOpenClawLocalSkillsDir,
+  type RecognizedSkillRecord,
+} from "~/api";
 import { ROUTE_PATHS } from "~/common/constants";
 import { useSkillStore } from "~/store";
 import styles from "./index.css";
@@ -13,9 +15,55 @@ const { Paragraph, Text, Title } = Typography;
 
 export function SkillsPage() {
   const installedSkillIds = useSkillStore((state) => state.installedSkillIds);
+  const recognizedSkills = useSkillStore((state) => state.recognizedSkills);
+  const recognizedSkillIds = useSkillStore((state) => state.recognizedSkillIds);
   const readySkillIds = useSkillStore((state) => state.readySkillIds);
   const openSkill = useSkillStore((state) => state.openSkill);
+  const refreshInstalledSkills = useSkillStore((state) => state.refreshInstalledSkills);
   const navigate = useNavigate();
+  const [skillUrl, setSkillUrl] = useState("");
+  const [installingFromUrl, setInstallingFromUrl] = useState(false);
+  const [installingFromDirectory, setInstallingFromDirectory] = useState(false);
+
+  const handleInstallFromDirectory = async () => {
+    setInstallingFromDirectory(true);
+    try {
+      const directory = await pickOpenClawLocalSkillsDir();
+      if (!directory) {
+        return;
+      }
+
+      const installed = await installSkillFromDirectory(directory);
+      await refreshInstalledSkills();
+      message.success(`已导入技能：${installed.name}`);
+      openSkill(installed.id);
+    } catch (error) {
+      message.error(`导入技能失败: ${String(error)}`);
+    } finally {
+      setInstallingFromDirectory(false);
+    }
+  };
+
+  const handleInstallFromUrl = async () => {
+    const value = skillUrl.trim();
+    if (!value) {
+      message.warning("请先输入技能压缩包链接");
+      return;
+    }
+
+    setInstallingFromUrl(true);
+    try {
+      const installed = await installSkillFromUrl(value);
+      setSkillUrl("");
+      await refreshInstalledSkills();
+      message.success(`已安装技能：${installed.name}`);
+      openSkill(installed.id);
+    } catch (error) {
+      message.error(`安装技能失败: ${String(error)}`);
+    } finally {
+      setInstallingFromUrl(false);
+    }
+  };
 
   return (
     <Flex vertical gap={20}>
@@ -23,31 +71,31 @@ export function SkillsPage() {
         <div className={styles.marketHero}>
           <div className={styles.marketCopy}>
             <Title level={2} style={{ margin: 0 }}>
-              电商经营场景中心
+              技能中心
             </Title>
             <Paragraph type="secondary" style={{ marginTop: 8, marginBottom: 0 }}>
-              围绕发品、售后、复盘这些高频工作，提供可直接调用的经营能力。当前版本先从最常用的 3
-              个场景开始，后续再补评价修复、异常订单和风险巡检。
+              这里集中展示当前工作台可调用的本地技能和 runtime 已识别技能。
             </Paragraph>
           </div>
           <div className={styles.marketStats}>
-            <div className={styles.marketStatChip}>已启用能力 {installedSkillIds.length}</div>
+            <div className={styles.marketStatChip}>已启用技能 {installedSkillIds.length}</div>
+            <div className={styles.marketStatChip}>已识别技能 {recognizedSkillIds.length}</div>
             <div className={styles.marketStatChip}>当前可用 {readySkillIds.length}</div>
           </div>
         </div>
         <div className={styles.marketFeatureBand}>
           <div>
-            <Text type="secondary">后续规划</Text>
-            <div className={styles.featureBandTitle}>平台接入 / 上下文带入 / 私有能力中心</div>
+            <Text type="secondary">能力来源</Text>
+            <div className={styles.featureBandTitle}>本地目录 / Runtime 识别 / 私有技能</div>
           </div>
-          <Text type="secondary">当前版本优先使用本地和私有能力，不依赖公共技能市场。</Text>
+          <Text type="secondary">页面只展示真实存在的技能，不再混入预置演示数据。</Text>
         </div>
       </Card>
 
       <Row gutter={[16, 16]}>
         <Col xs={24} md={8}>
           <Card>
-            <Statistic title="已启用能力" value={installedSkillIds.length} suffix="个" />
+            <Statistic title="已启用技能" value={installedSkillIds.length} suffix="个" />
           </Card>
         </Col>
         <Col xs={24} md={8}>
@@ -57,95 +105,102 @@ export function SkillsPage() {
         </Col>
         <Col xs={24} md={8}>
           <Card>
-            <Statistic title="首批重点场景" value={PRIMARY_SKILL_BLUEPRINTS.length} suffix="个" />
+            <Statistic title="Runtime 已识别" value={recognizedSkills.length} suffix="个" />
           </Card>
         </Col>
       </Row>
 
-      <Card title="优先启用的经营能力">
-        <Row gutter={[16, 16]}>
-          {PRIMARY_SKILL_BLUEPRINTS.map((item) => {
-            const installed = installedSkillIds.includes(item.key);
-            const ready = readySkillIds.includes(item.key);
+      <Card title="安装技能">
+        <Flex vertical gap={16}>
+          <div className={styles.installGrid}>
+            <div className={styles.installPanel}>
+              <Title level={4} style={{ margin: 0 }}>
+                本地导入
+              </Title>
+              <Paragraph type="secondary" style={{ marginBottom: 0 }}>
+                选择一个技能目录导入。目录内需要直接包含 `skill.json` 和 `SKILL.md`。
+              </Paragraph>
+              <Flex gap={8} wrap>
+                <Button
+                  type="primary"
+                  loading={installingFromDirectory}
+                  onClick={() => void handleInstallFromDirectory()}
+                >
+                  选择目录导入
+                </Button>
+                <Button onClick={() => navigate(ROUTE_PATHS.settings)}>
+                  管理本地 Skills 目录
+                </Button>
+              </Flex>
+            </div>
 
-            return (
-              <Col xs={24} xl={8} key={item.key}>
-                <Card className={styles.skillCard}>
-                  <Flex vertical gap={14}>
-                    <Flex align="center" justify="space-between" gap={8}>
-                      <Tag color="gold">{item.category}</Tag>
-                      {ready ? (
-                        <Tag color="blue">已就绪</Tag>
-                      ) : installed ? (
-                        <Tag color="green">已启用</Tag>
-                      ) : (
-                        <Tag>待启用</Tag>
-                      )}
-                    </Flex>
-                    <div>
-                      <Title level={4} style={{ marginBottom: 8 }}>
-                        {item.title}
-                      </Title>
-                      <Paragraph type="secondary" style={{ marginBottom: 0 }}>
-                        {item.summary}
-                      </Paragraph>
-                    </div>
-                    <Flex gap={8} wrap>
-                      {item.platforms.map((platform) => (
-                        <Tag key={platform}>{platform}</Tag>
-                      ))}
-                    </Flex>
-                    <div className={styles.sceneList}>
-                      {item.scenes.map((scene) => (
-                        <span key={scene} className={styles.sceneChip}>
-                          {scene}
-                        </span>
-                      ))}
-                    </div>
-                    <Flex gap={8} wrap>
-                      <Button type="primary" onClick={() => navigate(ROUTE_PATHS.chat)}>
-                        去对话
-                      </Button>
-                      <Button onClick={() => openSkill(item.key)}>查看能力</Button>
-                    </Flex>
-                  </Flex>
-                </Card>
-              </Col>
-            );
-          })}
-        </Row>
+            <div className={styles.installPanel}>
+              <Title level={4} style={{ margin: 0 }}>
+                链接安装
+              </Title>
+              <Paragraph type="secondary" style={{ marginBottom: 0 }}>
+                支持 zip 链接，例如 GitHub release 产物或仓库压缩包链接。
+              </Paragraph>
+              <Input
+                value={skillUrl}
+                placeholder="https://example.com/my-skill.zip"
+                onChange={(event) => setSkillUrl(event.target.value)}
+                onPressEnter={() => void handleInstallFromUrl()}
+              />
+              <Flex gap={8} wrap>
+                <Button
+                  type="primary"
+                  loading={installingFromUrl}
+                  onClick={() => void handleInstallFromUrl()}
+                >
+                  从链接安装
+                </Button>
+              </Flex>
+            </div>
+          </div>
+          <Text type="secondary">
+            安装完成后会自动写入 Kadaclaw 托管目录，并刷新 Runtime 识别结果。
+          </Text>
+        </Flex>
       </Card>
 
-      <Card title="后续能力">
-        <Row gutter={[16, 16]}>
-          {SECONDARY_SKILL_BLUEPRINTS.map((item) => {
-            const profile = getSkillBlueprint({ id: item.key });
-
+      <Card title="Runtime 当前识别到的技能">
+        <Paragraph type="secondary">
+          这里展示的是 OpenClaw runtime 当前返回的真实技能清单。
+        </Paragraph>
+        <List<RecognizedSkillRecord>
+          dataSource={recognizedSkills}
+          locale={{
+            emptyText: "当前 runtime 尚未返回可识别技能",
+          }}
+          renderItem={(skill) => {
             return (
-              <Col xs={24} md={12} xl={8} key={item.key}>
-                <Card className={styles.secondaryCard}>
-                  <Flex vertical gap={10}>
-                    <Flex align="center" justify="space-between" gap={8}>
-                      <Text strong>{item.title}</Text>
-                      <Tag>{profile?.category ?? item.category}</Tag>
-                    </Flex>
-                    <Paragraph type="secondary" style={{ marginBottom: 0 }}>
-                      {item.summary}
-                    </Paragraph>
-                    <Flex gap={8} wrap>
-                      <Button size="small" onClick={() => openSkill(item.key)}>
-                        查看说明
-                      </Button>
-                      <Button size="small" onClick={() => navigate(ROUTE_PATHS.settings)}>
-                        前往接入
-                      </Button>
-                    </Flex>
-                  </Flex>
-                </Card>
-              </Col>
+              <List.Item
+                actions={[
+                  <Button key="view" type="link" onClick={() => openSkill(skill.name)}>
+                    详情
+                  </Button>,
+                  <Button key="chat" type="link" onClick={() => navigate(ROUTE_PATHS.chat)}>
+                    去对话
+                  </Button>,
+                ]}
+              >
+                <List.Item.Meta
+                  title={skill.name}
+                  description={skill.description}
+                />
+                <Flex gap={8} wrap justify="end">
+                  <Tag color={installedSkillIds.includes(skill.name) ? "blue" : "purple"}>
+                    {installedSkillIds.includes(skill.name) ? "本地已安装" : "Runtime 识别"}
+                  </Tag>
+                  <Tag color={skill.eligible ? "blue" : "orange"}>
+                    {skill.eligible ? "可直接调用" : "已识别"}
+                  </Tag>
+                </Flex>
+              </List.Item>
             );
-          })}
-        </Row>
+          }}
+        />
       </Card>
     </Flex>
   );

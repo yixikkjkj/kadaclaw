@@ -9,6 +9,9 @@ export interface InstalledSkillRecord {
   version: string;
   manifestPath: string;
   directory: string;
+  sourceLabel: string;
+  sourceType: "bundled" | "local";
+  removable: boolean;
 }
 
 export interface RecognizedSkillRecord {
@@ -27,6 +30,22 @@ export function listInstalledSkills() {
 
 export function listRecognizedSkills() {
   return invoke<RecognizedSkillRecord[]>("list_recognized_skills");
+}
+
+export function installSkillFromDirectory(directory: string) {
+  return invoke<InstalledSkillRecord>("install_skill_from_directory", {
+    payload: {
+      directory,
+    },
+  });
+}
+
+export function installSkillFromUrl(url: string) {
+  return invoke<InstalledSkillRecord>("install_skill_from_url", {
+    payload: {
+      url,
+    },
+  });
 }
 
 export function removeSkill(skillId: string) {

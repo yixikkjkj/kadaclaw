@@ -80,6 +80,14 @@
   background: rgba(255, 255, 255, 0.94);
 }
 
+.traceCard {
+  margin-left: 52px;
+  max-width: min(82%, 780px);
+  border-radius: 20px;
+  background: rgba(250, 248, 242, 0.92);
+  border: 1px solid rgba(15, 123, 108, 0.12);
+}
+
 .chatMeta {
   margin-bottom: 6px;
 }
@@ -98,6 +106,20 @@
   border-radius: 999px;
   background: rgba(15, 123, 108, 0.7);
   animation: pulse-cursor 1s ease-in-out infinite;
+}
+
+.traceContent {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(22, 30, 27, 0.92);
+  color: #dce7df;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 240px;
+  overflow: auto;
 }
 
 @keyframes pulse-cursor {
@@ -132,5 +154,10 @@
 
   .chatMessageList {
     padding: 16px;
+  }
+
+  .traceCard {
+    margin-left: 0;
+    max-width: 100%;
   }
 }

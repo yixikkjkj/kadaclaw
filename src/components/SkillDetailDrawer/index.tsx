@@ -1,8 +1,6 @@
 import { Alert, Button, Card, Descriptions, Drawer, Flex, Tag, Typography } from "antd";
 import { useMemo } from "react";
-import { getSkillBlueprint } from "~/common/ecommerce";
 import { useSkillStore } from "~/store";
-import styles from "./index.css";
 
 const { Paragraph, Text } = Typography;
 
@@ -11,7 +9,9 @@ export function SkillDetailDrawer() {
   const skillDrawerOpen = useSkillStore((state) => state.skillDrawerOpen);
   const closeSkill = useSkillStore((state) => state.closeSkill);
   const installedSkills = useSkillStore((state) => state.installedSkills);
+  const recognizedSkills = useSkillStore((state) => state.recognizedSkills);
   const installedSkillIds = useSkillStore((state) => state.installedSkillIds);
+  const readySkillIds = useSkillStore((state) => state.readySkillIds);
   const skillOperations = useSkillStore((state) => state.skillOperations);
   const skillOperationError = useSkillStore((state) => state.skillOperationError);
   const removeInstalledSkill = useSkillStore((state) => state.removeInstalledSkill);
@@ -20,14 +20,9 @@ export function SkillDetailDrawer() {
     () => installedSkills.find((item) => item.id === selectedSkillId) ?? null,
     [installedSkills, selectedSkillId],
   );
-  const blueprint = useMemo(
-    () =>
-      getSkillBlueprint({
-        id: selectedSkillId ?? undefined,
-        name: installedSummary?.name,
-        category: installedSummary?.category,
-      }),
-    [installedSummary?.category, installedSummary?.name, selectedSkillId],
+  const recognizedSummary = useMemo(
+    () => recognizedSkills.find((item) => item.name === selectedSkillId) ?? null,
+    [recognizedSkills, selectedSkillId],
   );
 
   if (!selectedSkillId) {
@@ -35,11 +30,12 @@ export function SkillDetailDrawer() {
   }
 
   const installed = installedSkillIds.includes(selectedSkillId);
+  const ready = readySkillIds.includes(selectedSkillId);
   const operation = skillOperations[selectedSkillId];
   const busy = Boolean(operation);
-  const displayName = installedSummary?.name ?? blueprint?.title ?? selectedSkillId;
+  const displayName = installedSummary?.name ?? recognizedSummary?.name ?? selectedSkillId;
   const displaySummary =
-    blueprint?.summary ?? installedSummary?.summary ?? "暂无能力说明，后续会补充更详细的业务说明。";
+    installedSummary?.summary ?? recognizedSummary?.description ?? "暂无技能说明。";
 
   return (
     <Drawer
@@ -48,7 +44,7 @@ export function SkillDetailDrawer() {
       title={displayName}
       onClose={closeSkill}
       extra={
-        installed ? (
+        installed && installedSummary?.removable ? (
           <Button
             type="primary"
             loading={busy}
@@ -72,64 +68,30 @@ export function SkillDetailDrawer() {
           <Alert
             type="info"
             showIcon
-            message="当前能力尚未启用"
-            description="你可以先查看适用平台、输入要求和示例提问，再决定是否接入对应能力。"
+            message={recognizedSummary ? "当前能力已由 Runtime 识别" : "当前能力尚未启用"}
+            description={
+              recognizedSummary
+                ? "该能力可以被当前 runtime 看见，但本地没有对应 manifest。你仍然可以查看说明并在对话中尝试调用。"
+                : "你可以先查看输入要求和示例提问，再决定是否接入对应能力。"
+            }
           />
         ) : null}
 
         <Flex gap={8} wrap>
           <Tag color="green">v{installedSummary?.version ?? "preview"}</Tag>
-          <Tag>{installedSummary?.author ?? "预置能力"}</Tag>
-          <Tag color="gold">{blueprint?.category ?? installedSummary?.category ?? "经营能力"}</Tag>
-          {installed ? <Tag color="blue">已启用</Tag> : <Tag>待启用</Tag>}
+          <Tag>{installedSummary?.author ?? "OpenClaw Runtime"}</Tag>
+          <Tag color="gold">{installedSummary?.category ?? "Runtime"}</Tag>
+          {installedSummary?.sourceLabel ? (
+            <Tag color={installedSummary.sourceType === "bundled" ? "blue" : "geekblue"}>
+              {installedSummary.sourceLabel}
+            </Tag>
+          ) : recognizedSummary ? (
+            <Tag color="purple">Runtime 识别</Tag>
+          ) : null}
+          {installed ? <Tag color="blue">已启用</Tag> : ready ? <Tag color="blue">可直接调用</Tag> : <Tag>待启用</Tag>}
         </Flex>
 
         <Paragraph>{displaySummary}</Paragraph>
-
-        {blueprint ? (
-          <Card title="业务说明">
-            <Flex vertical gap={16}>
-              <div>
-                <Text strong>适用平台</Text>
-                <div className={styles.tagGroup}>
-                  {blueprint.platforms.map((platform) => (
-                    <Tag key={platform}>{platform}</Tag>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <Text strong>适用场景</Text>
-                <div className={styles.tagGroup}>
-                  {blueprint.scenes.map((scene) => (
-                    <Tag key={scene} color="gold">
-                      {scene}
-                    </Tag>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <Text strong>建议准备的上下文</Text>
-                <div className={styles.tagGroup}>
-                  {blueprint.requiredContexts.map((item) => (
-                    <Tag key={item} color="blue">
-                      {item}
-                    </Tag>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <Text strong>推荐提问</Text>
-                <Flex vertical gap={8} className={styles.promptList}>
-                  {blueprint.examplePrompts.map((item) => (
-                    <Paragraph key={item} className={styles.promptItem}>
-                      {item}
-                    </Paragraph>
-                  ))}
-                </Flex>
-              </div>
-            </Flex>
-          </Card>
-        ) : null}
 
         <Card title="技术概览">
           <Descriptions column={1} size="small">
@@ -137,8 +99,14 @@ export function SkillDetailDrawer() {
             <Descriptions.Item label="版本">{installedSummary?.version ?? "--"}</Descriptions.Item>
             <Descriptions.Item label="作者">{installedSummary?.author ?? "--"}</Descriptions.Item>
             <Descriptions.Item label="分类">
-              {blueprint?.category ?? installedSummary?.category ?? "--"}
+              {installedSummary?.category ?? "--"}
             </Descriptions.Item>
+            {installedSummary ? (
+              <Descriptions.Item label="来源">{installedSummary.sourceLabel}</Descriptions.Item>
+            ) : null}
+            {recognizedSummary && !installedSummary ? (
+              <Descriptions.Item label="来源">Runtime 识别</Descriptions.Item>
+            ) : null}
             {installedSummary ? (
               <Descriptions.Item label="Manifest">
                 {installedSummary.manifestPath}
@@ -152,7 +120,7 @@ export function SkillDetailDrawer() {
 
         <Card title="状态说明">
           <Text type="secondary">
-            当前版本优先使用本地和私有经营能力。后续会在这一块补平台接入状态、最近调用次数和上下文要求。
+            当前页面展示的是本地技能与 runtime 实际识别结果。
           </Text>
         </Card>
       </Flex>

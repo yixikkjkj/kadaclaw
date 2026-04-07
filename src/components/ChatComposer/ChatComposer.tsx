@@ -1,13 +1,10 @@
 import { Sender } from "@ant-design/x";
-import { message, Select, Tag, Typography } from "antd";
+import { message, Select } from "antd";
 import { useEffect, useMemo, useState } from "react";
 import { type InstalledSkillRecord, type OpenClawAuthConfig, saveOpenClawAuthConfig } from "~/api";
-import { buildCommercePlaceholder, buildCommercePromptPrefix } from "~/common/ecommerce";
 import { OPENCLAW_PROVIDER_OPTIONS } from "~/common/constants";
-import { useChatStore, useCommerceContextStore, useRuntimeStore, useSkillStore } from "~/store";
+import { useChatStore, useRuntimeStore, useSkillStore } from "~/store";
 import styles from "./index.css";
-
-const { Text } = Typography;
 
 interface ChatComposerProps {
   authConfig: OpenClawAuthConfig | null;
@@ -29,13 +26,6 @@ export const ChatComposer = ({
   const stopStreamingMessage = useChatStore((state) => state.stopStreamingMessage);
   const installedSkills = useSkillStore((state) => state.installedSkills);
   const readySkillIds = useSkillStore((state) => state.readySkillIds);
-  const selectedPlatform = useCommerceContextStore((state) => state.selectedPlatform);
-  const selectedScene = useCommerceContextStore((state) => state.selectedScene);
-  const selectedObject = useCommerceContextStore((state) => state.selectedObject);
-  const selectedRange = useCommerceContextStore((state) => state.selectedRange);
-  const draftMessage = useCommerceContextStore((state) => state.draftMessage);
-  const draftVersion = useCommerceContextStore((state) => state.draftVersion);
-  const clearDraftMessage = useCommerceContextStore((state) => state.clearDraftMessage);
   const [inputValue, setInputValue] = useState("");
   const [selectedModel, setSelectedModel] = useState(authConfig?.model ?? "");
   const [selectedSkillId, setSelectedSkillId] = useState<string | null>(null);
@@ -45,33 +35,6 @@ export const ChatComposer = ({
   useEffect(() => {
     setSelectedModel(authConfig?.model ?? "");
   }, [authConfig?.model]);
-
-  useEffect(() => {
-    if (draftMessage) {
-      setInputValue(draftMessage);
-      clearDraftMessage();
-    }
-  }, [clearDraftMessage, draftMessage, draftVersion]);
-
-  const promptPrefix = useMemo(
-    () =>
-      buildCommercePromptPrefix({
-        platform: selectedPlatform,
-        scene: selectedScene,
-        target: selectedObject,
-        range: selectedRange,
-      }),
-    [selectedObject, selectedPlatform, selectedRange, selectedScene],
-  );
-
-  const placeholder = useMemo(
-    () =>
-      buildCommercePlaceholder({
-        platform: selectedPlatform,
-        scene: selectedScene,
-      }),
-    [selectedPlatform, selectedScene],
-  );
 
   const modelOptions = useMemo(() => {
     const options = OPENCLAW_PROVIDER_OPTIONS.map((item) => ({
@@ -98,31 +61,16 @@ export const ChatComposer = ({
     [readySkills],
   );
 
-  const runtimeStatusLabel = useMemo(() => {
-    if (streamingRunning) {
-      return "回复中";
-    }
-
-    switch (runtimeStatus) {
-      case "ready":
-        return "已连接";
-      case "checking":
-        return "连接中";
-      case "error":
-        return "连接异常";
-      default:
-        return "未连接";
-    }
-  }, [runtimeStatus, streamingRunning]);
-
   const selectedSkill = readySkills.find((skill) => skill.id === selectedSkillId) ?? null;
   const canInteract = runtimeStatus === "ready" || streamingRunning;
   const senderLoading = streamingRunning;
 
   const handleModelChange = async (nextModel: string) => {
     const providerConfig =
-      OPENCLAW_PROVIDER_OPTIONS.find((item) => item.model === nextModel) ??
-      OPENCLAW_PROVIDER_OPTIONS.find((item) => item.value === authConfig?.provider);
+      authConfig?.provider === "custom"
+        ? OPENCLAW_PROVIDER_OPTIONS.find((item) => item.value === "custom")
+        : OPENCLAW_PROVIDER_OPTIONS.find((item) => item.model === nextModel) ??
+          OPENCLAW_PROVIDER_OPTIONS.find((item) => item.value === authConfig?.provider);
 
     if (!providerConfig) {
       message.error("未找到可用的 Provider 配置");
@@ -137,6 +85,7 @@ export const ChatComposer = ({
         provider: providerConfig.value,
         model: nextModel,
         apiKey: "",
+        apiBaseUrl: authConfig?.provider === "custom" ? authConfig.apiBaseUrl ?? "" : "",
       });
       onAuthConfigChange(saved);
     } catch (reason) {
@@ -154,13 +103,9 @@ export const ChatComposer = ({
       return;
     }
 
-    const contextualMessage = promptPrefix
-      ? `${promptPrefix}\n\n用户请求：${trimmedMessage}`
-      : trimmedMessage;
-
     const payload = selectedSkill
-      ? buildSkillPrompt(contextualMessage, selectedSkill)
-      : contextualMessage;
+      ? buildSkillPrompt(trimmedMessage, selectedSkill)
+      : trimmedMessage;
 
     setInputValue("");
     setChatError(null);
@@ -185,7 +130,7 @@ export const ChatComposer = ({
       onCancel={() => void handleCancel()}
       submitType="enter"
       disabled={!canInteract}
-      placeholder={placeholder || "输入你的问题，Enter 发送，Shift + Enter 换行"}
+      placeholder="输入你的问题，Enter 发送，Shift + Enter 换行"
       autoSize={{ minRows: 3, maxRows: 6 }}
       skill={
         selectedSkill

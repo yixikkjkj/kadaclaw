@@ -12,32 +12,80 @@ import {
   Tag,
   Typography,
 } from "antd";
-import { getSkillBlueprint } from "~/common/ecommerce";
+import { useMemo } from "react";
+import { type RecognizedSkillRecord } from "~/api";
 import { useSkillStore } from "~/store";
 import styles from "./index.css";
 
 const { Paragraph, Text } = Typography;
 
+interface InstalledSkillListItem {
+  id: string;
+  name: string;
+  category: string;
+  summary: string;
+  author: string;
+  version: string;
+  manifestPath?: string;
+  directory?: string;
+  sourceLabel: string;
+  sourceType: "bundled" | "local" | "runtime";
+  removable: boolean;
+  recognized: boolean;
+  eligible: boolean;
+  description?: string;
+}
+
 export function InstalledPage() {
   const openSkill = useSkillStore((state) => state.openSkill);
   const installedSkills = useSkillStore((state) => state.installedSkills);
+  const recognizedSkills = useSkillStore((state) => state.recognizedSkills);
   const recognizedSkillIds = useSkillStore((state) => state.recognizedSkillIds);
   const readySkillIds = useSkillStore((state) => state.readySkillIds);
   const skillOperations = useSkillStore((state) => state.skillOperations);
   const skillOperationError = useSkillStore((state) => state.skillOperationError);
   const removeInstalledSkill = useSkillStore((state) => state.removeInstalledSkill);
 
+  const mergedSkills = useMemo<InstalledSkillListItem[]>(() => {
+    const installedItems: InstalledSkillListItem[] = installedSkills.map((skill) => ({
+      ...skill,
+      recognized: recognizedSkillIds.includes(skill.id),
+      eligible: readySkillIds.includes(skill.id),
+    }));
+
+    const recognizedOnlyItems: InstalledSkillListItem[] = recognizedSkills
+      .filter((record) => !installedSkills.some((skill) => skill.id === record.name))
+      .map((record) => ({
+        id: record.name,
+        name: record.name,
+        category: "Runtime",
+        summary: record.description || "该技能已被当前 runtime 识别。",
+        author: "OpenClaw Runtime",
+        version: "runtime",
+        sourceLabel: "Runtime 识别",
+        sourceType: "runtime",
+        removable: false,
+        recognized: true,
+        eligible: record.eligible,
+        description: record.description,
+      }));
+
+    return [...installedItems, ...recognizedOnlyItems].sort((left, right) =>
+      left.name.localeCompare(right.name, "zh-CN"),
+    );
+  }, [installedSkills, readySkillIds, recognizedSkillIds, recognizedSkills]);
+
   return (
     <Flex vertical gap={20}>
       <Row gutter={[16, 16]}>
         <Col xs={24} md={8}>
           <Card>
-            <Statistic title="已启用能力" value={installedSkills.length} suffix="个" />
+            <Statistic title="已启用能力" value={mergedSkills.length} suffix="个" />
           </Card>
         </Col>
         <Col xs={24} md={8}>
           <Card>
-            <Statistic title="已识别能力" value={recognizedSkillIds.length} suffix="个" />
+            <Statistic title="本地安装" value={installedSkills.length} suffix="个" />
           </Card>
         </Col>
         <Col xs={24} md={8}>
@@ -47,26 +95,21 @@ export function InstalledPage() {
         </Col>
       </Row>
 
-      <Card title="已启用经营能力">
+      <Card title="已启用技能">
         {skillOperationError ? (
           <Alert type="error" showIcon message={skillOperationError} style={{ marginBottom: 16 }} />
         ) : null}
         <Paragraph type="secondary">
-          这里展示的是当前工作台已启用的本地经营能力。只有被 OpenClaw 识别并就绪的能力，才能在对话中直接调用。
+          这里同时展示本地已安装技能和当前 runtime 已识别技能。只要 OpenClaw 已识别并就绪，就可以在对话中直接调用。
         </Paragraph>
         <List
-          dataSource={installedSkills}
+          dataSource={mergedSkills}
           locale={{
-            emptyText: <Empty description="当前没有已安装技能" />,
+            emptyText: <Empty description="当前没有可展示的技能" />,
           }}
           renderItem={(skill) => {
             const operation = skillOperations[skill.id];
             const busy = Boolean(operation);
-            const blueprint = getSkillBlueprint({
-              id: skill.id,
-              name: skill.name,
-              category: skill.category,
-            });
             return (
               <List.Item
                 actions={[
@@ -81,10 +124,16 @@ export function InstalledPage() {
                   <Button
                     key="remove"
                     loading={busy}
-                    disabled={busy}
+                    disabled={busy || !skill.removable}
                     onClick={() => void removeInstalledSkill(skill.id, skill.name)}
                   >
-                    {operation === "removing" ? "卸载中" : "卸载"}
+                    {skill.removable
+                      ? operation === "removing"
+                        ? "卸载中"
+                        : "卸载"
+                      : skill.sourceType === "runtime"
+                        ? "Runtime"
+                        : "外部目录"}
                   </Button>,
                 ]}
               >
@@ -99,7 +148,7 @@ export function InstalledPage() {
                     <Flex vertical gap={6}>
                       <Text>{skill.summary}</Text>
                       <Text type="secondary">
-                        {blueprint?.summary ?? `${skill.category} 场景经营能力`} · {skill.version}
+                        {skill.category} · {skill.version}
                       </Text>
                     </Flex>
                   }
@@ -107,10 +156,20 @@ export function InstalledPage() {
                 <Flex gap={8} wrap>
                   <Tag color="gold">{skill.category}</Tag>
                   <Tag>{skill.author}</Tag>
-                  {blueprint?.platforms.map((platform) => <Tag key={platform}>{platform}</Tag>)}
-                  {recognizedSkillIds.includes(skill.id) ? (
-                    <Tag color={readySkillIds.includes(skill.id) ? "blue" : "orange"}>
-                      {readySkillIds.includes(skill.id) ? "已识别并就绪" : "已识别"}
+                  <Tag
+                    color={
+                      skill.sourceType === "bundled"
+                        ? "blue"
+                        : skill.sourceType === "local"
+                          ? "geekblue"
+                          : "purple"
+                    }
+                  >
+                    {skill.sourceLabel}
+                  </Tag>
+                  {skill.recognized ? (
+                    <Tag color={skill.eligible ? "blue" : "orange"}>
+                      {skill.eligible ? "已识别并就绪" : "已识别"}
                     </Tag>
                   ) : null}
                 </Flex>
@@ -122,7 +181,7 @@ export function InstalledPage() {
 
       <Card title="技术详情">
         <Paragraph type="secondary">
-          本区域保留实际落盘信息，方便核对 manifest、目录和版本，避免业务能力与本地安装状态脱节。
+          本区域保留本地安装技能的实际落盘信息，方便核对 manifest、目录和版本。
         </Paragraph>
         <Row gutter={[16, 16]}>
           {installedSkills.map((skill) => (
@@ -130,6 +189,7 @@ export function InstalledPage() {
               <Card>
                 <Descriptions column={1} size="small">
                   <Descriptions.Item label="技能 ID">{skill.id}</Descriptions.Item>
+                  <Descriptions.Item label="来源">{skill.sourceLabel}</Descriptions.Item>
                   <Descriptions.Item label="Manifest">{skill.manifestPath}</Descriptions.Item>
                   <Descriptions.Item label="目录">{skill.directory}</Descriptions.Item>
                 </Descriptions>
@@ -138,6 +198,34 @@ export function InstalledPage() {
           ))}
         </Row>
       </Card>
+
+      {recognizedSkills.some((record) => !installedSkills.some((skill) => skill.id === record.name)) ? (
+        <Card title="仅由 Runtime 识别的技能">
+          <List<RecognizedSkillRecord>
+            dataSource={recognizedSkills.filter((record) => !installedSkills.some((skill) => skill.id === record.name))}
+            renderItem={(skill) => (
+              <List.Item
+                actions={[
+                  <Button key="view" type="link" onClick={() => openSkill(skill.name)}>
+                    详情
+                  </Button>,
+                ]}
+              >
+                <List.Item.Meta
+                  title={skill.name}
+                  description={skill.description || "该技能已由 runtime 识别，但本地没有对应 manifest。"}
+                />
+                <Flex gap={8} wrap>
+                  <Tag color="purple">Runtime 识别</Tag>
+                  <Tag color={skill.eligible ? "blue" : "orange"}>
+                    {skill.eligible ? "可直接调用" : "已识别"}
+                  </Tag>
+                </Flex>
+              </List.Item>
+            )}
+          />
+        </Card>
+      ) : null}
     </Flex>
   );
 }

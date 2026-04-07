@@ -14,6 +14,7 @@ const createSkillSnapshot = (
   recognizedSkills: RecognizedSkillRecord[],
 ) => ({
   installedSkills,
+  recognizedSkills,
   installedSkillIds: installedSkills.map((skill) => skill.id),
   recognizedSkillIds: recognizedSkills.map((record) => record.name),
   readySkillIds: recognizedSkills.filter((record) => record.eligible).map((record) => record.name),
@@ -22,6 +23,7 @@ const createSkillSnapshot = (
 interface SkillState {
   installedSkillIds: string[];
   installedSkills: InstalledSkillRecord[];
+  recognizedSkills: RecognizedSkillRecord[];
   recognizedSkillIds: string[];
   readySkillIds: string[];
   skillOperations: Record<string, "removing">;
@@ -40,6 +42,7 @@ interface SkillState {
 export const useSkillStore = create<SkillState>((set, get) => ({
   installedSkillIds: [],
   installedSkills: [],
+  recognizedSkills: [],
   recognizedSkillIds: [],
   readySkillIds: [],
   skillOperations: {},
@@ -56,10 +59,17 @@ export const useSkillStore = create<SkillState>((set, get) => ({
       skillDrawerOpen: false,
     }),
   refreshInstalledSkills: async () => {
-    const [records, recognized] = await Promise.all([
+    const [recordsResult, recognizedResult] = await Promise.allSettled([
       listInstalledSkills(),
       listRecognizedSkills(),
     ]);
+
+    if (recordsResult.status !== "fulfilled") {
+      throw recordsResult.reason;
+    }
+
+    const records = recordsResult.value;
+    const recognized = recognizedResult.status === "fulfilled" ? recognizedResult.value : [];
 
     set({
       ...createSkillSnapshot(records, recognized),
@@ -68,9 +78,19 @@ export const useSkillStore = create<SkillState>((set, get) => ({
     return { records, recognized };
   },
   removeInstalledSkill: async (skillId, skillName) => {
-    const { installedSkillIds, skillOperations, refreshInstalledSkills } = get();
+    const { installedSkillIds, installedSkills, skillOperations, refreshInstalledSkills } = get();
 
     if (!installedSkillIds.includes(skillId) || skillOperations[skillId]) {
+      return false;
+    }
+
+    const targetSkill = installedSkills.find((skill) => skill.id === skillId);
+    if (!targetSkill?.removable) {
+      const errorMessage = "当前技能来自外部本地目录，请直接在原目录中管理，不支持在 Kadaclaw 中删除。";
+      set({
+        skillOperationError: errorMessage,
+      });
+      message.error(errorMessage);
       return false;
     }
 
@@ -83,7 +103,10 @@ export const useSkillStore = create<SkillState>((set, get) => ({
     }));
 
     try {
-      await removeSkill(skillId);
+      const removed = await removeSkill(skillId);
+      if (!removed) {
+        throw new Error("目标技能不在 Kadaclaw 托管目录中，无法直接删除。");
+      }
       message.success(`已卸载技能：${skillName}`);
       await refreshInstalledSkills();
       return true;

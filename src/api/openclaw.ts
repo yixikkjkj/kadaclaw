@@ -41,6 +41,11 @@ export interface RuntimeInfoResult {
   commandPath: string;
   installDir: string;
   skillsDir: string;
+  localSkillsDirs: string[];
+}
+
+export interface OpenClawLocalSkillsDirsConfig {
+  directories: string[];
 }
 
 export interface OpenClawSelfCheckItem {
@@ -63,12 +68,14 @@ export interface OpenClawAuthConfig {
   model: string;
   apiKeyEnvName: string;
   apiKeyConfigured: boolean;
+  apiBaseUrl?: string | null;
 }
 
 export interface SaveOpenClawAuthPayload {
   provider: string;
   model: string;
   apiKey: string;
+  apiBaseUrl?: string;
 }
 
 export interface SendOpenClawMessagePayload {
@@ -86,6 +93,8 @@ export interface OpenClawChatResponse {
 export interface OpenClawChatStreamSnapshot {
   sessionId: string;
   content: string;
+  rawContent: string;
+  status: string;
 }
 
 export function getOpenClawConfig() {
@@ -132,8 +141,24 @@ export function getOpenClawAuthConfig() {
   return invoke<OpenClawAuthConfig>("get_openclaw_auth_config");
 }
 
+export function getOpenClawLocalSkillsDirs() {
+  return invoke<OpenClawLocalSkillsDirsConfig>("get_openclaw_local_skills_dirs");
+}
+
+export function pickOpenClawLocalSkillsDir() {
+  return invoke<string | null>("pick_openclaw_local_skills_dir");
+}
+
 export function saveOpenClawAuthConfig(payload: SaveOpenClawAuthPayload) {
   return invoke<OpenClawAuthConfig>("save_openclaw_auth_config", { payload });
+}
+
+export function saveOpenClawLocalSkillsDirs(directories: string[]) {
+  return invoke<OpenClawLocalSkillsDirsConfig>("save_openclaw_local_skills_dirs", {
+    payload: {
+      directories,
+    },
+  });
 }
 
 export function sendOpenClawMessage(payload: SendOpenClawMessagePayload) {

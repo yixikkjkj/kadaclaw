@@ -21,7 +21,7 @@ export const AppRoot = () => {
   const hydrateChatHistory = useChatStore((state) => state.hydrateChatHistory);
   const hydrateActiveStream = useChatStore((state) => state.hydrateActiveStream);
   const streamingRunning = useChatStore((state) => state.streamingRunning);
-  const updateStreamingReply = useChatStore((state) => state.updateStreamingReply);
+  const updateStreamingSnapshot = useChatStore((state) => state.updateStreamingSnapshot);
   const [bootstrapping, setBootstrapping] = useState(true);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [onboardingLoading, setOnboardingLoading] = useState(false);
@@ -99,8 +99,13 @@ export const AppRoot = () => {
     let disposed = false;
     let unlisten: (() => void) | null = null;
 
-    void listen<{ sessionId: string; content: string }>("openclaw://chat-stream", (event) => {
-      updateStreamingReply(event.payload.sessionId, event.payload.content);
+    void listen<{
+      sessionId: string;
+      content: string;
+      rawContent: string;
+      status: string;
+    }>("openclaw://chat-stream", (event) => {
+      updateStreamingSnapshot(event.payload);
     })
       .then((nextUnlisten) => {
         if (disposed) {
@@ -118,7 +123,7 @@ export const AppRoot = () => {
       disposed = true;
       unlisten?.();
     };
-  }, [hydrateActiveStream, updateStreamingReply]);
+  }, [hydrateActiveStream, updateStreamingSnapshot]);
 
   useEffect(() => {
     if (!isTauri() || !streamingRunning) {
@@ -133,7 +138,7 @@ export const AppRoot = () => {
             return;
           }
 
-          updateStreamingReply(snapshot.sessionId, snapshot.content);
+          updateStreamingSnapshot(snapshot);
         })
         .catch((reason) => {
           if (!disposed) {
@@ -146,7 +151,7 @@ export const AppRoot = () => {
       disposed = true;
       window.clearInterval(timer);
     };
-  }, [streamingRunning, updateStreamingReply]);
+  }, [streamingRunning, updateStreamingSnapshot]);
 
   useEffect(() => {
     if (bootstrapStartedRef.current) {

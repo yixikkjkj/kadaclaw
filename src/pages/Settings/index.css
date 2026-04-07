@@ -46,11 +46,6 @@
   gap: 6px;
 }
 
-.connectorCard {
-  height: 100%;
-  border-radius: 20px;
-}
-
 @media (max-width: 992px) {
   .settingsHeroGrid {
     grid-template-columns: 1fr;

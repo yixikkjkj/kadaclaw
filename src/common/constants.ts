@@ -22,6 +22,12 @@ export const OPENCLAW_PROVIDER_OPTIONS: OpenClawProviderOption[] = [
     model: "anthropic/claude-opus-4-6",
   },
   {
+    label: "Custom Provider",
+    value: "custom",
+    env: "OPENAI_API_KEY",
+    model: "openai/gpt-5.2",
+  },
+  {
     label: "OpenAI",
     value: "openai",
     env: "OPENAI_API_KEY",

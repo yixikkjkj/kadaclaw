@@ -7,6 +7,7 @@ import {
   sendOpenClawMessage,
   stopOpenClawMessage,
   type ChatHistoryState,
+  type OpenClawChatStreamSnapshot,
 } from "~/api";
 import { type ChatMessage, type ChatRole, type ChatSession } from "~/types";
 
@@ -16,8 +17,7 @@ const createInitialChatMessages = (timestamp: string): ChatMessage[] => [
   {
     id: `welcome-${timestamp}`,
     role: "assistant",
-    content:
-      "这里是 Kadaclaw 内置经营助手。你可以结合当前平台、场景和时间范围，直接提出经营问题。",
+    content: "这里是 Kadaclaw 内置助手。你可以直接提问，或调用当前已识别的本地技能。",
     createdAt: timestamp,
   },
 ];
@@ -53,6 +53,8 @@ interface ChatState {
   chatError: string | null;
   streamingSessionId: string | null;
   streamingReply: string;
+  streamingRawContent: string;
+  streamingStatus: string;
   streamingRunning: boolean;
   streamingStopping: boolean;
   streamStopRequested: boolean;
@@ -66,7 +68,7 @@ interface ChatState {
   appendMessageToSession: (sessionId: string, message: ChatMessage) => void;
   createSession: () => void;
   deleteSession: (sessionId: string) => void;
-  updateStreamingReply: (sessionId: string, content: string) => void;
+  updateStreamingSnapshot: (snapshot: OpenClawChatStreamSnapshot) => void;
   clearStreamingState: () => void;
   sendMessage: (message: string) => Promise<void>;
   stopStreamingMessage: () => Promise<void>;
@@ -150,6 +152,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
   chatError: null,
   streamingSessionId: null,
   streamingReply: "",
+  streamingRawContent: "",
+  streamingStatus: "",
   streamingRunning: false,
   streamingStopping: false,
   streamStopRequested: false,
@@ -181,6 +185,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
         set((state) => ({
           streamingSessionId: null,
           streamingReply: "",
+          streamingRawContent: "",
+          streamingStatus: "",
           streamingRunning: state.streamingRunning ? false : state.streamingRunning,
           streamingStopping: false,
           streamStopRequested: false,
@@ -191,6 +197,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       set({
         streamingSessionId: snapshot.sessionId,
         streamingReply: snapshot.content,
+        streamingRawContent: snapshot.rawContent,
+        streamingStatus: snapshot.status,
         streamingRunning: true,
         streamingStopping: false,
         streamStopRequested: false,
@@ -301,20 +309,25 @@ export const useChatStore = create<ChatState>((set, get) => ({
       persistChatHistory(get());
     }
   },
-  updateStreamingReply: (sessionId, content) => {
+  updateStreamingSnapshot: (snapshot) => {
     set((state) => ({
-      streamingSessionId: sessionId,
-      streamingReply: content,
+      streamingSessionId: snapshot.sessionId,
+      streamingReply: snapshot.content,
+      streamingRawContent: snapshot.rawContent,
+      streamingStatus: snapshot.status,
       streamingRunning: true,
-      streamingStopping: state.streamingSessionId === sessionId ? state.streamingStopping : false,
+      streamingStopping:
+        state.streamingSessionId === snapshot.sessionId ? state.streamingStopping : false,
       streamStopRequested:
-        state.streamingSessionId === sessionId ? state.streamStopRequested : false,
+        state.streamingSessionId === snapshot.sessionId ? state.streamStopRequested : false,
     }));
   },
   clearStreamingState: () => {
     set({
       streamingSessionId: null,
       streamingReply: "",
+      streamingRawContent: "",
+      streamingStatus: "",
       streamingRunning: false,
       streamingStopping: false,
       streamStopRequested: false,
@@ -343,6 +356,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set({
       streamingSessionId: sessionId,
       streamingReply: "",
+      streamingRawContent: "",
+      streamingStatus: "OpenClaw 正在处理请求",
       streamingRunning: true,
       streamingStopping: false,
       streamStopRequested: false,

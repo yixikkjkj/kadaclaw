@@ -1,9 +1,10 @@
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
+use std::collections::HashSet;
 use std::env;
 use std::fs;
-use std::io::{BufReader, Read};
+use std::io::{BufReader, Cursor, Read};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Output, Stdio};
 use std::sync::Mutex;
@@ -62,6 +63,7 @@ struct RuntimeInfoResult {
   command_path: String,
   install_dir: String,
   skills_dir: String,
+  local_skills_dirs: Vec<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -90,6 +92,13 @@ struct OpenClawAuthConfig {
   model: String,
   api_key_env_name: String,
   api_key_configured: bool,
+  api_base_url: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct OpenClawLocalSkillsDirsConfig {
+  directories: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -98,6 +107,7 @@ struct SaveOpenClawAuthPayload {
   provider: String,
   model: String,
   api_key: String,
+  api_base_url: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -121,6 +131,8 @@ struct OpenClawChatResponse {
 struct OpenClawChatStreamEvent {
   session_id: String,
   content: String,
+  raw_content: String,
+  status: String,
 }
 
 #[derive(Default)]
@@ -178,6 +190,9 @@ struct InstalledSkillRecord {
   version: String,
   manifest_path: String,
   directory: String,
+  source_label: String,
+  source_type: String,
+  removable: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -209,6 +224,24 @@ struct SaveConfigPayload {
   command: String,
   args: Vec<String>,
   working_directory: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SaveOpenClawLocalSkillsDirsPayload {
+  directories: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct InstallSkillFromDirectoryPayload {
+  directory: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct InstallSkillFromUrlPayload {
+  url: String,
 }
 
 impl Default for OpenClawConfig {
@@ -491,33 +524,162 @@ fn is_openclaw_transient_status_line(line: &str) -> bool {
     || (normalized.starts_with("waitingfor") && normalized.ends_with("reply"))
 }
 
-fn sanitize_openclaw_output(raw_output: &str) -> String {
+fn is_openclaw_single_char_status_fragment(line: &str) -> bool {
+  let trimmed = line.trim();
+  let mut chars = trimmed.chars();
+  let Some(ch) = chars.next() else {
+    return false;
+  };
+
+  chars.next().is_none()
+    && (ch.is_ascii_alphanumeric() || matches!(ch, '◓' | '◐' | '◑' | '◒' | '●' | '○'))
+}
+
+fn is_openclaw_status_fragment(line: &str) -> bool {
+  let trimmed = line.trim();
+  if trimmed.is_empty() {
+    return false;
+  }
+
+  if is_openclaw_single_char_status_fragment(trimmed) {
+    return true;
+  }
+
+  let normalized = trimmed
+    .chars()
+    .filter(|ch| ch.is_ascii_alphanumeric())
+    .flat_map(|ch| ch.to_lowercase())
+    .collect::<String>();
+
+  !normalized.is_empty()
+    && normalized.len() <= 12
+    && (normalized == "waiting"
+      || normalized == "for"
+      || normalized == "agent"
+      || normalized == "assistant"
+      || normalized == "gateway"
+      || normalized == "reply"
+      || normalized == "thinking")
+}
+
+fn normalize_openclaw_output_lines(raw_output: &str) -> Vec<String> {
   let cleaned = strip_terminal_control_sequences(raw_output);
+  let raw_lines = cleaned.lines().collect::<Vec<_>>();
   let mut lines = Vec::new();
   let mut skip_banner_tagline = false;
+  let mut index = 0;
 
-  for line in cleaned.lines() {
+  while index < raw_lines.len() {
+    let line = raw_lines[index];
     let trimmed = line.trim();
 
     if trimmed.is_empty() {
+      index += 1;
       continue;
     }
 
     if trimmed.starts_with("🦞 OpenClaw ") || trimmed.starts_with("OpenClaw ") {
       skip_banner_tagline = true;
+      index += 1;
       continue;
     }
 
     if skip_banner_tagline {
       skip_banner_tagline = false;
       if line.starts_with(' ') || line.starts_with('\t') {
+        index += 1;
         continue;
       }
     }
 
     if trimmed == "│" || trimmed == "◇" {
+      index += 1;
       continue;
     }
+
+    if is_openclaw_status_fragment(trimmed) {
+      let start = index;
+      let mut collapsed = String::new();
+
+      while index < raw_lines.len() {
+        let candidate = raw_lines[index].trim();
+        if !is_openclaw_status_fragment(candidate) {
+          break;
+        }
+        collapsed.push_str(candidate);
+        index += 1;
+      }
+
+      if index - start >= 2 {
+        let collapsed_trimmed = collapsed
+          .trim_start_matches(|ch: char| matches!(ch, '◓' | '◐' | '◑' | '◒' | '●' | '○'))
+          .trim()
+          .to_string();
+
+        if !collapsed_trimmed.is_empty() {
+          let collapsed_normalized = collapsed_trimmed
+            .chars()
+            .filter(|ch| ch.is_ascii_alphanumeric())
+            .flat_map(|ch| ch.to_lowercase())
+            .collect::<String>();
+
+          if is_openclaw_transient_status_line(&collapsed_trimmed)
+            || is_openclaw_transient_status_line(&collapsed_normalized)
+          {
+            continue;
+          }
+
+          lines.push(collapsed_trimmed);
+        }
+        continue;
+      }
+
+      lines.extend(raw_lines[start..index].iter().map(|item| item.trim().to_string()));
+      continue;
+    }
+
+    lines.push(trimmed.to_string());
+    index += 1;
+  }
+
+  lines
+}
+
+fn summarize_openclaw_raw_output(raw_output: &str) -> String {
+  const MAX_LINES: usize = 18;
+  let lines = normalize_openclaw_output_lines(raw_output);
+  if lines.len() <= MAX_LINES {
+    return lines.join("\n");
+  }
+
+  lines[lines.len() - MAX_LINES..].join("\n")
+}
+
+fn extract_openclaw_status(raw_output: &str) -> String {
+  let lines = normalize_openclaw_output_lines(raw_output);
+
+  for line in lines.iter().rev() {
+    if is_openclaw_transient_status_line(line)
+      || line.starts_with("Calling")
+      || line.starts_with("Running")
+      || line.starts_with("Using")
+      || line.starts_with("Opening")
+      || line.starts_with("Waiting")
+    {
+      return line.clone();
+    }
+  }
+
+  lines
+    .last()
+    .cloned()
+    .unwrap_or_else(|| "OpenClaw 正在处理请求".to_string())
+}
+
+fn sanitize_openclaw_output(raw_output: &str) -> String {
+  let mut lines = Vec::new();
+  for line in normalize_openclaw_output_lines(raw_output) {
+    let trimmed = line.trim();
 
     if is_openclaw_transient_status_line(trimmed) {
       continue;
@@ -876,8 +1038,111 @@ fn skills_dir_for_app(app: &AppHandle) -> Result<PathBuf, String> {
   Ok(bundled_skills_dir(&prefix))
 }
 
-fn sync_openclaw_skills_extra_dir(app: &AppHandle) -> Result<(), String> {
+fn read_openclaw_skills_extra_dirs(app: &AppHandle) -> Result<Vec<String>, String> {
+  let path = runtime_config_path(&bundled_prefix(app)?);
+  let root = ensure_runtime_config_object(&path)?;
+  let bundled_skills_dir = skills_dir_for_app(app)?.to_string_lossy().to_string();
+  let configured_extra_dirs = root
+    .get("skills")
+    .and_then(|value| value.get("load"))
+    .and_then(|value| value.get("extraDirs"))
+    .and_then(Value::as_array)
+    .map(|items| {
+      items
+        .iter()
+        .filter_map(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty() && *value != bundled_skills_dir)
+        .map(ToString::to_string)
+        .collect::<Vec<_>>()
+    })
+    .unwrap_or_default();
+  let discovered_extra_dirs = discover_local_skill_dirs(app);
+  let extra_dirs = configured_extra_dirs
+    .into_iter()
+    .chain(discovered_extra_dirs)
+    .collect::<Vec<_>>();
+
+  Ok(normalize_local_skill_dirs(&extra_dirs))
+}
+
+fn normalize_local_skill_dirs(directories: &[String]) -> Vec<String> {
+  let mut seen = HashSet::new();
+  let mut normalized = Vec::new();
+
+  for directory in directories {
+    let value = directory.trim();
+    if value.is_empty() {
+      continue;
+    }
+
+    if seen.insert(value.to_string()) {
+      normalized.push(value.to_string());
+    }
+  }
+
+  normalized
+}
+
+fn is_skill_directory(path: &Path) -> bool {
+  path.join("skill.json").is_file() && path.join("SKILL.md").is_file()
+}
+
+fn find_workspace_skills_dir(start: &Path) -> Option<PathBuf> {
+  let mut current = if start.is_dir() {
+    start.to_path_buf()
+  } else {
+    start.parent()?.to_path_buf()
+  };
+
+  loop {
+    let candidate = current.join("skills");
+    if candidate.is_dir() {
+      let entries = fs::read_dir(&candidate).ok()?;
+      for entry in entries.flatten() {
+        if is_skill_directory(&entry.path()) {
+          return Some(candidate);
+        }
+      }
+    }
+
+    if !current.pop() {
+      break;
+    }
+  }
+
+  None
+}
+
+fn discover_local_skill_dirs(app: &AppHandle) -> Vec<String> {
+  let mut directories = Vec::new();
+
+  if let Ok(current_dir) = env::current_dir() {
+    if let Some(skills_dir) = find_workspace_skills_dir(&current_dir) {
+      directories.push(skills_dir.to_string_lossy().to_string());
+    }
+  }
+
+  if let Ok(config) = read_config(app) {
+    let working_directory = config.working_directory.trim();
+    if !working_directory.is_empty() {
+      if let Some(skills_dir) = find_workspace_skills_dir(Path::new(working_directory)) {
+        directories.push(skills_dir.to_string_lossy().to_string());
+      }
+    }
+  }
+
+  normalize_local_skill_dirs(&directories)
+}
+
+fn save_openclaw_local_skills_dirs_impl(app: &AppHandle, directories: Vec<String>) -> Result<Vec<String>, String> {
   let skills_dir = skills_dir_for_app(app)?;
+  let normalized_directories = normalize_local_skill_dirs(&directories);
+
+  for directory in &normalized_directories {
+    fs::create_dir_all(directory).map_err(|error| format!("无法创建本地 skills 目录 {}: {error}", directory))?;
+  }
+
   let path = runtime_config_path(&bundled_prefix(app)?);
   let mut root = ensure_runtime_config_object(&path)?;
 
@@ -910,17 +1175,109 @@ fn sync_openclaw_skills_extra_dir(app: &AppHandle) -> Result<(), String> {
     .as_array_mut()
     .ok_or_else(|| "skills.load.extraDirs 配置无效".to_string())?;
   let skills_dir_string = skills_dir.to_string_lossy().to_string();
-  if !extra_dirs.iter().any(|item| item.as_str() == Some(&skills_dir_string)) {
-    extra_dirs.push(Value::String(skills_dir_string));
+  *extra_dirs = std::iter::once(skills_dir_string)
+    .chain(normalized_directories.iter().cloned())
+    .map(Value::String)
+    .collect();
+
+  write_runtime_config_value(&path, &root)?;
+  Ok(normalized_directories)
+}
+
+fn sync_openclaw_skills_extra_dir(app: &AppHandle) -> Result<(), String> {
+  let directories = read_openclaw_skills_extra_dirs(app)?;
+  save_openclaw_local_skills_dirs_impl(app, directories).map(|_| ())
+}
+
+#[cfg(target_os = "macos")]
+fn pick_openclaw_local_skills_dir_native() -> Result<Option<String>, String> {
+  let output = Command::new("osascript")
+    .args([
+      "-e",
+      "set selectedFolder to choose folder with prompt \"选择本地 Skills 目录\"",
+      "-e",
+      "POSIX path of selectedFolder",
+    ])
+    .output()
+    .map_err(|error| format!("无法打开目录选择器: {error}"))?;
+
+  if output.status.success() {
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    return if stdout.is_empty() { Ok(None) } else { Ok(Some(stdout)) };
   }
 
-  write_runtime_config_value(&path, &root)
+  let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+  if stderr.contains("User canceled") || stderr.contains("(-128)") {
+    Ok(None)
+  } else {
+    Err(format!("打开目录选择器失败: {stderr}"))
+  }
+}
+
+#[cfg(target_os = "windows")]
+fn pick_openclaw_local_skills_dir_native() -> Result<Option<String>, String> {
+  let script = r#"
+Add-Type -AssemblyName System.Windows.Forms
+$dialog = New-Object System.Windows.Forms.FolderBrowserDialog
+$dialog.Description = '选择本地 Skills 目录'
+$dialog.ShowNewFolderButton = $true
+if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
+  Write-Output $dialog.SelectedPath
+}
+"#;
+
+  let output = Command::new("powershell")
+    .arg("-NoProfile")
+    .arg("-STA")
+    .arg("-Command")
+    .arg(script)
+    .output()
+    .map_err(|error| format!("无法打开目录选择器: {error}"))?;
+
+  if !output.status.success() {
+    return Err(format!("打开目录选择器失败: {}", String::from_utf8_lossy(&output.stderr).trim()));
+  }
+
+  let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+  if stdout.is_empty() {
+    Ok(None)
+  } else {
+    Ok(Some(stdout))
+  }
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+fn pick_openclaw_local_skills_dir_native() -> Result<Option<String>, String> {
+  let candidates = [
+    ("zenity", vec!["--file-selection", "--directory", "--title=选择本地 Skills 目录"]),
+    ("kdialog", vec!["--getexistingdirectory", ".", "--title", "选择本地 Skills 目录"]),
+  ];
+
+  for (command_name, args) in candidates {
+    let output = match Command::new(command_name).args(&args).output() {
+      Ok(output) => output,
+      Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+      Err(error) => return Err(format!("无法打开目录选择器: {error}")),
+    };
+
+    if output.status.success() {
+      let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+      return if stdout.is_empty() { Ok(None) } else { Ok(Some(stdout)) };
+    }
+
+    if output.status.code() == Some(1) {
+      return Ok(None);
+    }
+  }
+
+  Err("当前系统未检测到可用的目录选择器，请手动输入本地 Skills 路径。".to_string())
 }
 
 fn provider_env_name(provider: &str) -> Option<&'static str> {
   match provider {
     "anthropic" => Some("ANTHROPIC_API_KEY"),
     "openai" => Some("OPENAI_API_KEY"),
+    "custom" => Some("OPENAI_API_KEY"),
     "openrouter" => Some("OPENROUTER_API_KEY"),
     "deepseek" => Some("DEEPSEEK_API_KEY"),
     "google" => Some("GEMINI_API_KEY"),
@@ -951,7 +1308,18 @@ fn read_openclaw_auth_config(app: &AppHandle) -> Result<OpenClawAuthConfig, Stri
     .and_then(Value::as_str)
     .unwrap_or("anthropic/claude-opus-4-6")
     .to_string();
-  let provider = provider_from_model(&model);
+  let api_base_url = root
+    .get("env")
+    .and_then(|value| value.get("OPENAI_BASE_URL"))
+    .and_then(Value::as_str)
+    .map(str::trim)
+    .filter(|value| !value.is_empty())
+    .map(ToString::to_string);
+  let provider = if api_base_url.is_some() {
+    "custom".to_string()
+  } else {
+    provider_from_model(&model)
+  };
   let api_key_env_name = provider_env_name(&provider).unwrap_or("ANTHROPIC_API_KEY").to_string();
   let api_key_configured = root
     .get("env")
@@ -965,6 +1333,7 @@ fn read_openclaw_auth_config(app: &AppHandle) -> Result<OpenClawAuthConfig, Stri
     model,
     api_key_env_name,
     api_key_configured,
+    api_base_url,
   })
 }
 
@@ -999,6 +1368,18 @@ fn save_openclaw_auth_config_impl(
   if !api_key.is_empty() {
     env_obj.insert(api_key_env_name.clone(), Value::String(api_key));
   }
+  let api_base_url = payload
+    .api_base_url
+    .as_deref()
+    .map(str::trim)
+    .filter(|value| !value.is_empty())
+    .map(ToString::to_string);
+  if provider == "custom" {
+    let base_url = api_base_url.ok_or_else(|| "Custom Provider 的 API Base URL 不能为空".to_string())?;
+    env_obj.insert("OPENAI_BASE_URL".to_string(), Value::String(base_url));
+  } else {
+    env_obj.remove("OPENAI_BASE_URL");
+  }
 
   let agents_value = root_obj.entry("agents".to_string()).or_insert_with(|| json!({}));
   if !agents_value.is_object() {
@@ -1022,6 +1403,7 @@ fn save_openclaw_auth_config_impl(
     .as_object_mut()
     .ok_or_else(|| "agents.defaults.model 配置无效".to_string())?;
   model_obj.insert("primary".to_string(), Value::String(model.clone()));
+  root_obj.remove("kadaclaw");
 
   write_runtime_config_value(&path, &root)?;
 
@@ -1053,6 +1435,205 @@ fn skill_dir_name(skill_id: &str) -> String {
 fn skill_manifest_path(app: &AppHandle, skill_id: &str) -> Result<PathBuf, String> {
   let skills_dir = skills_dir_for_app(app)?;
   Ok(skills_dir.join(skill_dir_name(skill_id)).join("skill.json"))
+}
+
+fn read_skill_manifest(manifest_path: &Path) -> Result<SkillManifest, String> {
+  let content = fs::read_to_string(manifest_path)
+    .map_err(|error| format!("无法读取技能清单 {}: {error}", manifest_path.display()))?;
+  serde_json::from_str::<SkillManifest>(&content)
+    .map_err(|error| format!("技能清单格式错误 {}: {error}", manifest_path.display()))
+}
+
+fn read_skill_manifest_from_dir(skill_dir: &Path) -> Result<SkillManifest, String> {
+  if !skill_dir.is_dir() {
+    return Err(format!("技能目录不存在: {}", skill_dir.display()));
+  }
+
+  if !skill_dir.join("SKILL.md").is_file() {
+    return Err(format!("技能目录缺少 SKILL.md: {}", skill_dir.display()));
+  }
+
+  read_skill_manifest(&skill_dir.join("skill.json"))
+}
+
+fn build_installed_skill_record(
+  skill_dir: &Path,
+  manifest: &SkillManifest,
+  source_label: &str,
+  source_type: &str,
+  removable: bool,
+) -> InstalledSkillRecord {
+  InstalledSkillRecord {
+    id: manifest.id.clone(),
+    name: manifest.name.clone(),
+    category: manifest.category.clone(),
+    summary: manifest.summary.clone(),
+    author: manifest.author.clone(),
+    version: manifest.version.clone(),
+    manifest_path: skill_dir.join("skill.json").to_string_lossy().to_string(),
+    directory: skill_dir.to_string_lossy().to_string(),
+    source_label: source_label.to_string(),
+    source_type: source_type.to_string(),
+    removable,
+  }
+}
+
+fn copy_directory_recursive(source_dir: &Path, target_dir: &Path) -> Result<(), String> {
+  fs::create_dir_all(target_dir).map_err(|error| format!("无法创建目录 {}: {error}", target_dir.display()))?;
+
+  let entries = fs::read_dir(source_dir)
+    .map_err(|error| format!("无法读取目录 {}: {error}", source_dir.display()))?;
+
+  for entry in entries {
+    let entry = entry.map_err(|error| format!("读取目录条目失败: {error}"))?;
+    let source_path = entry.path();
+    let target_path = target_dir.join(entry.file_name());
+
+    if source_path.is_dir() {
+      copy_directory_recursive(&source_path, &target_path)?;
+    } else {
+      ensure_parent_dir(&target_path)?;
+      fs::copy(&source_path, &target_path).map_err(|error| {
+        format!(
+          "无法复制文件 {} -> {}: {error}",
+          source_path.display(),
+          target_path.display()
+        )
+      })?;
+    }
+  }
+
+  Ok(())
+}
+
+fn create_temp_subdir(prefix: &str) -> Result<PathBuf, String> {
+  let stamp = std::time::SystemTime::now()
+    .duration_since(std::time::UNIX_EPOCH)
+    .map(|duration| duration.as_millis())
+    .unwrap_or(0);
+  let directory = env::temp_dir().join(format!("kadaclaw-{prefix}-{stamp}"));
+  fs::create_dir_all(&directory).map_err(|error| format!("无法创建临时目录 {}: {error}", directory.display()))?;
+  Ok(directory)
+}
+
+fn extract_zip_bytes_to_dir(bytes: &[u8], target_dir: &Path) -> Result<(), String> {
+  let mut archive = zip::ZipArchive::new(Cursor::new(bytes))
+    .map_err(|error| format!("无法解析技能压缩包: {error}"))?;
+
+  for index in 0..archive.len() {
+    let mut entry = archive
+      .by_index(index)
+      .map_err(|error| format!("无法读取压缩包条目: {error}"))?;
+    let Some(relative_path) = entry.enclosed_name().map(|value| value.to_path_buf()) else {
+      continue;
+    };
+    let output_path = target_dir.join(relative_path);
+
+    if entry.is_dir() {
+      fs::create_dir_all(&output_path)
+        .map_err(|error| format!("无法创建解压目录 {}: {error}", output_path.display()))?;
+      continue;
+    }
+
+    ensure_parent_dir(&output_path)?;
+    let mut output_file = fs::File::create(&output_path)
+      .map_err(|error| format!("无法写入解压文件 {}: {error}", output_path.display()))?;
+    std::io::copy(&mut entry, &mut output_file)
+      .map_err(|error| format!("无法解压文件 {}: {error}", output_path.display()))?;
+  }
+
+  Ok(())
+}
+
+fn find_first_skill_directory(root: &Path) -> Option<PathBuf> {
+  if is_skill_directory(root) {
+    return Some(root.to_path_buf());
+  }
+
+  let entries = fs::read_dir(root).ok()?;
+  for entry in entries.flatten() {
+    let path = entry.path();
+    if !path.is_dir() {
+      continue;
+    }
+
+    if let Some(found) = find_first_skill_directory(&path) {
+      return Some(found);
+    }
+  }
+
+  None
+}
+
+fn install_managed_skill_from_directory(app: &AppHandle, source_dir: &Path) -> Result<InstalledSkillRecord, String> {
+  sync_openclaw_skills_extra_dir(app)?;
+  let manifest = read_skill_manifest_from_dir(source_dir)?;
+  let target_dir = skills_dir_for_app(app)?.join(skill_dir_name(&manifest.id));
+
+  let source_canonical = fs::canonicalize(source_dir)
+    .map_err(|error| format!("无法解析技能目录 {}: {error}", source_dir.display()))?;
+  let target_canonical = fs::canonicalize(&target_dir).ok();
+  if target_canonical.as_ref() == Some(&source_canonical) {
+    return Ok(build_installed_skill_record(
+      &target_dir,
+      &manifest,
+      "应用托管",
+      "bundled",
+      true,
+    ));
+  }
+
+  if target_dir.exists() {
+    fs::remove_dir_all(&target_dir)
+      .map_err(|error| format!("无法覆盖已安装技能目录 {}: {error}", target_dir.display()))?;
+  }
+
+  copy_directory_recursive(source_dir, &target_dir)?;
+  let installed_manifest = read_skill_manifest_from_dir(&target_dir)?;
+
+  Ok(build_installed_skill_record(
+    &target_dir,
+    &installed_manifest,
+    "应用托管",
+    "bundled",
+    true,
+  ))
+}
+
+async fn install_skill_from_url_impl(app: &AppHandle, payload: InstallSkillFromUrlPayload) -> Result<InstalledSkillRecord, String> {
+  let url = payload.url.trim().to_string();
+  if url.is_empty() {
+    return Err("技能链接不能为空".to_string());
+  }
+
+  if !url.starts_with("http://") && !url.starts_with("https://") {
+    return Err("当前只支持 http/https 技能链接".to_string());
+  }
+
+  let response = reqwest::Client::new()
+    .get(&url)
+    .timeout(Duration::from_secs(30))
+    .send()
+    .await
+    .map_err(|error| format!("下载技能失败: {error}"))?;
+
+  if !response.status().is_success() {
+    return Err(format!("下载技能失败，服务器返回 {}", response.status().as_u16()));
+  }
+
+  let bytes = response
+    .bytes()
+    .await
+    .map_err(|error| format!("读取技能压缩包失败: {error}"))?;
+  let temp_dir = create_temp_subdir("skill-install")?;
+  let install_result = (|| -> Result<InstalledSkillRecord, String> {
+    extract_zip_bytes_to_dir(bytes.as_ref(), &temp_dir)?;
+    let skill_dir = find_first_skill_directory(&temp_dir)
+      .ok_or_else(|| "压缩包中没有找到包含 skill.json 和 SKILL.md 的技能目录".to_string())?;
+    install_managed_skill_from_directory(app, &skill_dir)
+  })();
+  let _ = fs::remove_dir_all(&temp_dir);
+  install_result
 }
 
 fn ensure_parent_dir(path: &Path) -> Result<(), String> {
@@ -1145,39 +1726,44 @@ fn classify_windows_install_failure(stderr: &str, stdout: &str) -> String {
 }
 
 fn list_installed_skill_records(app: &AppHandle) -> Result<Vec<InstalledSkillRecord>, String> {
-  let skills_dir = skills_dir_for_app(app)?;
+  let bundled_skills_dir = skills_dir_for_app(app)?;
+  let local_skills_dirs = read_openclaw_skills_extra_dirs(app)?;
   let mut records = Vec::new();
+  let mut seen_ids = HashSet::new();
+  let skill_sources = std::iter::once((bundled_skills_dir, "应用托管".to_string(), "bundled".to_string(), true)).chain(
+    local_skills_dirs
+      .into_iter()
+      .map(|directory| (PathBuf::from(directory), "本地目录".to_string(), "local".to_string(), false)),
+  );
 
-  let entries =
-    fs::read_dir(&skills_dir).map_err(|error| format!("无法读取技能目录 {}: {error}", skills_dir.display()))?;
-
-  for entry in entries {
-    let entry = entry.map_err(|error| format!("读取技能目录条目失败: {error}"))?;
-    let path = entry.path();
-    if !path.is_dir() {
+  for (skills_dir, source_label, source_type, removable) in skill_sources {
+    if !skills_dir.exists() {
       continue;
     }
 
-    let manifest_path = path.join("skill.json");
-    if !manifest_path.exists() {
-      continue;
+    let entries =
+      fs::read_dir(&skills_dir).map_err(|error| format!("无法读取技能目录 {}: {error}", skills_dir.display()))?;
+
+    for entry in entries {
+      let entry = entry.map_err(|error| format!("读取技能目录条目失败: {error}"))?;
+      let path = entry.path();
+      if !path.is_dir() {
+        continue;
+      }
+
+      let manifest_path = path.join("skill.json");
+      if !manifest_path.exists() {
+        continue;
+      }
+
+      let manifest = read_skill_manifest(&manifest_path)?;
+
+      if !seen_ids.insert(manifest.id.clone()) {
+        continue;
+      }
+
+      records.push(build_installed_skill_record(&path, &manifest, &source_label, &source_type, removable));
     }
-
-    let content = fs::read_to_string(&manifest_path)
-      .map_err(|error| format!("无法读取技能清单 {}: {error}", manifest_path.display()))?;
-    let manifest: SkillManifest = serde_json::from_str(&content)
-      .map_err(|error| format!("技能清单格式错误 {}: {error}", manifest_path.display()))?;
-
-    records.push(InstalledSkillRecord {
-      id: manifest.id,
-      name: manifest.name,
-      category: manifest.category,
-      summary: manifest.summary,
-      author: manifest.author,
-      version: manifest.version,
-      manifest_path: manifest_path.to_string_lossy().to_string(),
-      directory: path.to_string_lossy().to_string(),
-    });
   }
 
   records.sort_by(|a, b| a.id.cmp(&b.id));
@@ -1228,7 +1814,7 @@ fn read_openclaw_skill_registry(app: &AppHandle) -> Result<Vec<OpenClawSkillEntr
     }
     apply_openclaw_env(&mut command, &config);
 
-    let output = run_command_with_timeout(&mut command, Duration::from_secs(6), "OpenClaw 技能列表命令")?;
+    let output = run_command_with_timeout(&mut command, Duration::from_secs(20), "OpenClaw 技能列表命令")?;
 
     if !output.status.success() {
       return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
@@ -1457,6 +2043,8 @@ async fn send_openclaw_message(
         Some(OpenClawChatStreamEvent {
           session_id: stream_session_id.clone(),
           content: String::new(),
+          raw_content: String::new(),
+          status: "OpenClaw 正在处理请求".to_string(),
         }),
       )?;
     }
@@ -1474,6 +2062,8 @@ async fn send_openclaw_message(
 
         raw_output.push_str(&chunk);
         let visible_output = sanitize_openclaw_output(&raw_output);
+        let raw_content = summarize_openclaw_raw_output(&raw_output);
+        let status = extract_openclaw_status(&raw_output);
 
         if visible_output != last_emitted {
           let active_chat_process = stream_app.state::<ActiveChatProcessState>();
@@ -1482,6 +2072,8 @@ async fn send_openclaw_message(
             Some(OpenClawChatStreamEvent {
               session_id: stream_session_id.clone(),
               content: visible_output.clone(),
+              raw_content: raw_content.clone(),
+              status: status.clone(),
             }),
           )?;
           stream_app
@@ -1490,10 +2082,34 @@ async fn send_openclaw_message(
               OpenClawChatStreamEvent {
                 session_id: stream_session_id.clone(),
                 content: visible_output.clone(),
+                raw_content: raw_content.clone(),
+                status: status.clone(),
               },
             )
             .map_err(|error| format!("发送 OpenClaw 流式事件失败: {error}"))?;
           last_emitted = visible_output;
+        } else {
+          let active_chat_process = stream_app.state::<ActiveChatProcessState>();
+          set_active_chat_stream(
+            active_chat_process.inner(),
+            Some(OpenClawChatStreamEvent {
+              session_id: stream_session_id.clone(),
+              content: visible_output.clone(),
+              raw_content: raw_content.clone(),
+              status: status.clone(),
+            }),
+          )?;
+          stream_app
+            .emit(
+              "openclaw://chat-stream",
+              OpenClawChatStreamEvent {
+                session_id: stream_session_id.clone(),
+                content: visible_output.clone(),
+                raw_content: raw_content.clone(),
+                status: status.clone(),
+              },
+            )
+            .map_err(|error| format!("发送 OpenClaw 流式事件失败: {error}"))?;
         }
       }
 
@@ -1773,6 +2389,7 @@ fn build_runtime_info(app: &AppHandle, config: &OpenClawConfig) -> Result<Runtim
     command_path: config.command.clone(),
     install_dir: install_dir.to_string_lossy().to_string(),
     skills_dir: skills_dir.to_string_lossy().to_string(),
+    local_skills_dirs: read_openclaw_skills_extra_dirs(app)?,
   })
 }
 
@@ -1908,6 +2525,28 @@ fn get_openclaw_auth_config(app: AppHandle) -> Result<OpenClawAuthConfig, String
 }
 
 #[tauri::command]
+fn get_openclaw_local_skills_dirs(app: AppHandle) -> Result<OpenClawLocalSkillsDirsConfig, String> {
+  Ok(OpenClawLocalSkillsDirsConfig {
+    directories: read_openclaw_skills_extra_dirs(&app)?,
+  })
+}
+
+#[tauri::command]
+fn pick_openclaw_local_skills_dir() -> Result<Option<String>, String> {
+  pick_openclaw_local_skills_dir_native()
+}
+
+#[tauri::command]
+fn save_openclaw_local_skills_dirs(
+  app: AppHandle,
+  payload: SaveOpenClawLocalSkillsDirsPayload,
+) -> Result<OpenClawLocalSkillsDirsConfig, String> {
+  Ok(OpenClawLocalSkillsDirsConfig {
+    directories: save_openclaw_local_skills_dirs_impl(&app, payload.directories)?,
+  })
+}
+
+#[tauri::command]
 fn save_openclaw_auth_config(app: AppHandle, payload: SaveOpenClawAuthPayload) -> Result<OpenClawAuthConfig, String> {
   save_openclaw_auth_config_impl(&app, payload)
 }
@@ -1951,6 +2590,27 @@ fn remove_skill(app: AppHandle, skill_id: String) -> Result<bool, String> {
 }
 
 #[tauri::command]
+fn install_skill_from_directory(
+  app: AppHandle,
+  payload: InstallSkillFromDirectoryPayload,
+) -> Result<InstalledSkillRecord, String> {
+  let directory = payload.directory.trim();
+  if directory.is_empty() {
+    return Err("技能目录不能为空".to_string());
+  }
+
+  install_managed_skill_from_directory(&app, Path::new(directory))
+}
+
+#[tauri::command]
+async fn install_skill_from_url(
+  app: AppHandle,
+  payload: InstallSkillFromUrlPayload,
+) -> Result<InstalledSkillRecord, String> {
+  install_skill_from_url_impl(&app, payload).await
+}
+
+#[tauri::command]
 async fn upgrade_bundled_openclaw_runtime(app: AppHandle) -> Result<InstallOpenClawResult, String> {
   install_bundled_openclaw_runtime(app).await
 }
@@ -1969,7 +2629,10 @@ pub fn run() {
       get_openclaw_runtime_info,
       run_openclaw_self_check,
       get_openclaw_auth_config,
+      get_openclaw_local_skills_dirs,
+      pick_openclaw_local_skills_dir,
       save_openclaw_auth_config,
+      save_openclaw_local_skills_dirs,
       get_chat_history,
       save_chat_history,
       send_openclaw_message,
@@ -1978,6 +2641,8 @@ pub fn run() {
       list_installed_skills,
       list_recognized_skills,
       remove_skill,
+      install_skill_from_directory,
+      install_skill_from_url,
       install_bundled_openclaw_runtime,
       upgrade_bundled_openclaw_runtime
     ])

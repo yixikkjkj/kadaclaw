@@ -1,0 +1,9 @@
+{
+  "id": "alibaba-1688-collector",
+  "name": "1688 商品采集导出",
+  "category": "浏览器自动化",
+  "summary": "通过浏览器搜索 1688 商品，采集结果并导出到本地 Excel 文件。",
+  "author": "Codex",
+  "version": "0.2.0",
+  "entry": "SKILL.md"
+}

@@ -17,13 +17,14 @@ import {
 } from "antd";
 import dayjs from "dayjs";
 import { useEffect, useState } from "react";
-import { COMMERCE_PLATFORM_OPTIONS } from "~/common/ecommerce";
 import { OPENCLAW_PROVIDER_OPTIONS } from "~/common/constants";
 import {
   getOpenClawAuthConfig,
   getOpenClawConfig,
+  getOpenClawLocalSkillsDirs,
   installBundledOpenClawRuntime,
   launchOpenClawRuntime,
+  pickOpenClawLocalSkillsDir,
   type OpenClawAuthConfig,
   type OpenClawConfig,
   type OpenClawSelfCheckResult,
@@ -32,13 +33,14 @@ import {
   type RuntimeInfoResult,
   saveOpenClawAuthConfig,
   saveOpenClawConfig,
+  saveOpenClawLocalSkillsDirs,
   upgradeBundledOpenClawRuntime,
 } from "~/api";
-import { useConnectorStore, useRuntimeStore } from "~/store";
-import { type CommercePlatform } from "~/types";
+import { useRuntimeStore, useSkillStore } from "~/store";
 import styles from "./index.css";
 
 const { Paragraph, Text, Title } = Typography;
+const { TextArea } = Input;
 
 export interface OpenClawFormValues extends Omit<OpenClawConfig, "args"> {
   args: string;
@@ -48,12 +50,7 @@ interface OpenClawAuthFormValues {
   provider: string;
   model: string;
   apiKey: string;
-}
-
-interface PlatformConnectionFormValues {
-  platform: CommercePlatform;
-  shopName: string;
-  credential: string;
+  apiBaseUrl: string;
 }
 
 function isWindowsHost() {
@@ -81,23 +78,28 @@ function formatCheckTime(value?: number | null) {
   return dayjs(value).format("YYYY/M/D HH:mm:ss");
 }
 
+const parseLocalSkillsDirsInput = (value: string) =>
+  Array.from(
+    new Set(
+      value
+        .split(/\r?\n/)
+        .map((item) => item.trim())
+        .filter(Boolean),
+    ),
+  );
+
 export function SettingsPage() {
   const [form] = Form.useForm<OpenClawFormValues>();
   const [authForm] = Form.useForm<OpenClawAuthFormValues>();
-  const [platformForm] = Form.useForm<PlatformConnectionFormValues>();
   const [runtimeStatus, setRuntimeStatus] = useState<OpenClawStatus | null>(null);
   const [runtimeInfo, setRuntimeInfo] = useState<RuntimeInfoResult | null>(null);
   const [selfCheckResult, setSelfCheckResult] = useState<OpenClawSelfCheckResult | null>(null);
   const [authConfig, setAuthConfig] = useState<OpenClawAuthConfig | null>(null);
+  const [localSkillsDirsInput, setLocalSkillsDirsInput] = useState("");
   const [loading, setLoading] = useState(false);
   const setRuntimeState = useRuntimeStore((state) => state.setRuntimeState);
-  const selectedConnectorPlatform = useConnectorStore((state) => state.selectedPlatform);
-  const connections = useConnectorStore((state) => state.connections);
-  const setSelectedConnectorPlatform = useConnectorStore((state) => state.setSelectedPlatform);
-  const saveConnection = useConnectorStore((state) => state.saveConnection);
-  const removeConnection = useConnectorStore((state) => state.removeConnection);
+  const refreshInstalledSkills = useSkillStore((state) => state.refreshInstalledSkills);
   const windowsHost = isWindowsHost();
-  const selectedConnection = connections[selectedConnectorPlatform];
 
   const refreshRuntimeInfo = async () => {
     try {
@@ -123,26 +125,25 @@ export function SettingsPage() {
       }
       await refreshRuntimeInfo();
       try {
+        const localSkillsDirs = await getOpenClawLocalSkillsDirs();
+        setLocalSkillsDirsInput(localSkillsDirs.directories.join("\n"));
+      } catch (error) {
+        message.error(`读取本地 Skills 目录失败: ${String(error)}`);
+      }
+      try {
         const auth = await getOpenClawAuthConfig();
         setAuthConfig(auth);
         authForm.setFieldsValue({
           provider: auth.provider,
           model: auth.model,
           apiKey: "",
+          apiBaseUrl: auth.apiBaseUrl ?? "",
         });
       } catch (error) {
         message.error(`读取授权配置失败: ${String(error)}`);
       }
     })();
-  }, [authForm, form, platformForm]);
-
-  useEffect(() => {
-    platformForm.setFieldsValue({
-      platform: selectedConnectorPlatform,
-      shopName: selectedConnection?.shopName ?? "",
-      credential: selectedConnection?.credential ?? "",
-    });
-  }, [platformForm, selectedConnection, selectedConnectorPlatform]);
+  }, [authForm, form]);
 
   const performSelfCheck = async (options?: { showSuccessMessage?: boolean }) => {
     const showSuccessMessage = options?.showSuccessMessage ?? true;
@@ -272,6 +273,40 @@ export function SettingsPage() {
     }
   };
 
+  const saveLocalSkillsDirectories = async () => {
+    setLoading(true);
+    try {
+      const directories = parseLocalSkillsDirsInput(localSkillsDirsInput);
+      const saved = await saveOpenClawLocalSkillsDirs(directories);
+      setLocalSkillsDirsInput(saved.directories.join("\n"));
+      await performSelfCheck({ showSuccessMessage: false });
+      await refreshInstalledSkills();
+      message.success("本地 Skills 目录已更新");
+    } catch (error) {
+      message.error(`保存本地 Skills 目录失败: ${String(error)}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const appendLocalSkillsDirectory = async () => {
+    setLoading(true);
+    try {
+      const directory = await pickOpenClawLocalSkillsDir();
+      if (!directory) {
+        return;
+      }
+
+      const nextDirectories = Array.from(new Set([...parseLocalSkillsDirsInput(localSkillsDirsInput), directory]));
+      setLocalSkillsDirsInput(nextDirectories.join("\n"));
+      message.success("目录已加入列表，点击“保存本地目录”后生效");
+    } catch (error) {
+      message.error(`选择本地 Skills 目录失败: ${String(error)}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const selfChecks = selfCheckResult?.items ?? [];
 
   return (
@@ -333,109 +368,6 @@ export function SettingsPage() {
           description="Kadaclaw 现在支持 Windows 下安装内置 OpenClaw，但如果你遇到 PowerShell 安装失败、命令找不到或 runtime 无法启动，优先考虑使用 WSL2 方案。"
         />
       ) : null}
-
-      <Card
-        title="平台接入"
-        extra={
-          <Text type="secondary">
-            最近保存：
-            {formatCheckTime(selectedConnection?.updatedAt ?? null)}
-          </Text>
-        }
-      >
-        <Flex vertical gap={16}>
-          <Paragraph type="secondary">
-            接入店铺后，系统可以自动带入商品、订单、售后和评价上下文。当前版本先提供接入规划入口，后续再接真实同步链路。
-          </Paragraph>
-
-          <Row gutter={[16, 16]}>
-            {COMMERCE_PLATFORM_OPTIONS.map((item) => (
-              <Col xs={24} md={12} xl={6} key={item.value}>
-                <Card className={styles.connectorCard}>
-                  <Flex vertical gap={10}>
-                    <Flex align="center" justify="space-between" gap={8}>
-                      <Text strong>{item.label}</Text>
-                      {connections[item.value] ? (
-                        <Tag color="blue">已配置</Tag>
-                      ) : item.value === "taobao" ? (
-                        <Tag>优先</Tag>
-                      ) : (
-                        <Tag>规划中</Tag>
-                      )}
-                    </Flex>
-                    <Text type="secondary">{item.description}</Text>
-                  </Flex>
-                </Card>
-              </Col>
-            ))}
-          </Row>
-
-          <Alert
-            type="info"
-            showIcon
-            message="接入规划"
-            description="第一阶段先保留店铺接入入口和凭据管理位；第二阶段再接商品、订单、售后和评价同步。"
-          />
-
-          <Form form={platformForm} layout="vertical">
-            <Row gutter={[16, 0]}>
-              <Col xs={24} md={8}>
-                <Form.Item label="平台" name="platform" rules={[{ required: true }]}>
-                  <Select
-                    options={COMMERCE_PLATFORM_OPTIONS.map((item) => ({
-                      label: item.label,
-                      value: item.value,
-                    }))}
-                    onChange={setSelectedConnectorPlatform}
-                  />
-                </Form.Item>
-              </Col>
-              <Col xs={24} md={8}>
-                <Form.Item label="店铺名称" name="shopName" rules={[{ required: true }]}>
-                  <Input placeholder="例如：旗舰店 / 抖店主账号" />
-                </Form.Item>
-              </Col>
-              <Col xs={24} md={8}>
-                <Form.Item label="接入凭据" name="credential" rules={[{ required: true }]}>
-                  <Input.Password placeholder="填写 API Token、Cookie 或授权凭据" />
-                </Form.Item>
-              </Col>
-            </Row>
-            <Flex gap={8} wrap>
-              <Button
-                type="primary"
-                onClick={() =>
-                  void (async () => {
-                    try {
-                      const values = await platformForm.validateFields();
-                      saveConnection(values);
-                      message.success("平台接入配置已保存到本地工作台");
-                    } catch {
-                      // Form 校验已接管提示。
-                    }
-                  })()
-                }
-              >
-                保存接入配置
-              </Button>
-              <Button
-                onClick={() => {
-                  if (selectedConnection) {
-                    removeConnection(selectedConnectorPlatform);
-                  }
-                  platformForm.setFieldsValue({
-                    platform: selectedConnectorPlatform,
-                    shopName: "",
-                    credential: "",
-                  });
-                }}
-              >
-                清空当前平台
-              </Button>
-            </Flex>
-          </Form>
-        </Flex>
-      </Card>
 
       <Card
         title="安装后自检"
@@ -521,6 +453,41 @@ export function SettingsPage() {
         </Form>
       </Card>
 
+      <Card title="本地 Skills 目录">
+        <Flex vertical gap={16}>
+          <Paragraph type="secondary">
+            这里可以接入你自己机器上的 Skills 目录。每行填写一个目录路径，保存后 Kadaclaw 会自动创建缺失目录，并把它们写入 OpenClaw 的
+            `skills.load.extraDirs`，让 runtime 识别这些本地技能。
+          </Paragraph>
+          <TextArea
+            rows={5}
+            value={localSkillsDirsInput}
+            onChange={(event) => setLocalSkillsDirsInput(event.target.value)}
+            placeholder={
+              windowsHost
+                ? "例如：\nC:\\Users\\你的用户名\\openclaw-skills\nD:\\workspace\\my-skills"
+                : "例如：\n/Users/your-name/openclaw-skills\n/Users/your-name/workspace/my-skills"
+            }
+          />
+          <Flex gap={8} wrap>
+            <Button loading={loading} onClick={() => void appendLocalSkillsDirectory()}>
+              选择目录并追加
+            </Button>
+            <Button type="primary" loading={loading} onClick={() => void saveLocalSkillsDirectories()}>
+              保存本地目录
+            </Button>
+            <Button
+              loading={loading}
+              onClick={() =>
+                setLocalSkillsDirsInput(runtimeInfo?.localSkillsDirs.join("\n") ?? "")
+              }
+            >
+              恢复当前配置
+            </Button>
+          </Flex>
+        </Flex>
+      </Card>
+
       <Card title="模型与授权">
         <Flex vertical gap={16}>
           <Alert
@@ -533,7 +500,9 @@ export function SettingsPage() {
             }
             description={
               authConfig
-                ? `当前模型为 ${authConfig.model}，OpenClaw 会读取 ${authConfig.apiKeyEnvName}。`
+                ? authConfig.provider === "custom"
+                  ? `当前模型为 ${authConfig.model}，OpenClaw 会读取 ${authConfig.apiKeyEnvName}，并通过 ${authConfig.apiBaseUrl || "未配置地址"} 发起请求。`
+                  : `当前模型为 ${authConfig.model}，OpenClaw 会读取 ${authConfig.apiKeyEnvName}。`
                 : "为 OpenClaw 选择模型提供方并写入对应 API key。"
             }
           />
@@ -554,6 +523,7 @@ export function SettingsPage() {
                       }
                       authForm.setFieldsValue({
                         model: next.model,
+                        apiBaseUrl: value === "custom" ? authConfig?.apiBaseUrl ?? "" : "",
                       });
                     }}
                   />
@@ -562,6 +532,24 @@ export function SettingsPage() {
               <Col xs={24} md={16}>
                 <Form.Item label="模型" name="model" rules={[{ required: true }]}>
                   <Input placeholder="anthropic/claude-opus-4-6" />
+                </Form.Item>
+              </Col>
+              <Col xs={24}>
+                <Form.Item
+                  noStyle
+                  shouldUpdate={(prevValues, nextValues) => prevValues.provider !== nextValues.provider}
+                >
+                  {({ getFieldValue }) =>
+                    getFieldValue("provider") === "custom" ? (
+                      <Form.Item
+                        label="API Base URL"
+                        name="apiBaseUrl"
+                        rules={[{ required: true, message: "请输入 Custom Provider 的 API Base URL" }]}
+                      >
+                        <Input placeholder="https://bobdong.cn/v1" />
+                      </Form.Item>
+                    ) : null
+                  }
                 </Form.Item>
               </Col>
               <Col xs={24}>
@@ -585,6 +573,7 @@ export function SettingsPage() {
                         provider: saved.provider,
                         model: saved.model,
                         apiKey: "",
+                        apiBaseUrl: saved.apiBaseUrl ?? "",
                       });
                       form.setFieldValue("model", saved.model);
                       message.success("模型与授权已保存到内置 OpenClaw");
@@ -648,6 +637,11 @@ export function SettingsPage() {
                 <Descriptions.Item label="命令路径">{runtimeInfo.commandPath}</Descriptions.Item>
                 <Descriptions.Item label="安装目录">{runtimeInfo.installDir}</Descriptions.Item>
                 <Descriptions.Item label="技能目录">{runtimeInfo.skillsDir}</Descriptions.Item>
+                <Descriptions.Item label="本地 Skills 目录">
+                  {runtimeInfo.localSkillsDirs.length > 0
+                    ? runtimeInfo.localSkillsDirs.join(" ; ")
+                    : "--"}
+                </Descriptions.Item>
               </Descriptions>
             </Card>
           </Col>

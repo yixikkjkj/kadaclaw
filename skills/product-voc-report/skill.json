@@ -1,0 +1,9 @@
+{
+  "id": "product-voc-report",
+  "name": "商品消费者原声分析",
+  "category": "商品分析",
+  "summary": "分析评价、问答、售后投诉等多源消费者声音，输出商品优化提升报告到本地。",
+  "author": "Codex",
+  "version": "0.1.0",
+  "entry": "SKILL.md"
+}

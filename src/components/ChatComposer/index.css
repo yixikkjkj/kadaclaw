@@ -1,4 +1,62 @@
 
+.senderDock {
+  margin: 0 24px 18px;
+  padding: 14px;
+  border-top: 1px solid rgba(19, 30, 26, 0.08);
+  background: rgba(248, 247, 242, 0.88);
+  backdrop-filter: blur(18px);
+}
+
+.senderMetaBar {
+  max-width: 980px;
+  margin: 0 auto 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.senderMetaGroup {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.senderLabel {
+  font-size: 12px;
+  color: #5f7269;
+  font-family:
+    "SFMono-Regular", "JetBrains Mono", "IBM Plex Mono", "Fira Code", "Menlo", "Consolas",
+    monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.senderTag {
+  margin-inline-end: 0;
+  border-radius: 999px;
+  background: #e6eeea;
+  color: #365247;
+}
+
+.senderTagAccent {
+  margin-inline-end: 0;
+  border-radius: 999px;
+  background: #dfeee6;
+  color: #1f5c50;
+}
+
+.senderHint {
+  color: #77857f;
+}
+
+.sender {
+  max-width: 980px;
+  margin: 0 auto;
+}
+
 .header {
   display: flex;
   align-items: center;
@@ -20,7 +78,7 @@
 }
 
 .control {
-  min-width: 220px;
+  min-width: 200px;
 }
 
 .footer {
@@ -31,22 +89,36 @@
   flex-wrap: wrap;
 }
 
-.statusRow {
+.footerControls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.footerActions {
   display: flex;
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
 }
 
-.metaRow {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
+.footerTip {
+  color: #7b8681;
+  font-size: 12px;
 }
 
 @media (max-width: 768px) {
+  .senderDock {
+    margin: 0 16px 16px;
+    padding: 12px;
+  }
+
   .control {
     min-width: 100%;
+  }
+
+  .footer {
+    justify-content: flex-start;
   }
 }

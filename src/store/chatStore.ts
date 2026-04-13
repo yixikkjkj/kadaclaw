@@ -9,7 +9,7 @@ import {
   type ChatHistoryState,
   type OpenClawChatStreamSnapshot,
 } from "~/api";
-import { type ChatMessage, type ChatRole, type ChatSession } from "~/types";
+import { type ChatJsonValue, type ChatMessage, type ChatRole, type ChatSession } from "~/types";
 
 const initialChatSessionId = "kadaclaw-main";
 
@@ -17,10 +17,30 @@ const createInitialChatMessages = (timestamp: string): ChatMessage[] => [
   {
     id: `welcome-${timestamp}`,
     role: "assistant",
-    content: "这里是 Kadaclaw 内置助手。你可以直接提问，或调用当前已识别的本地技能。",
+    content: "可以直接提问，或调用当前已启用的技能。",
     createdAt: timestamp,
   },
 ];
+
+const getChatMessageTitleText = (value: ChatJsonValue) => {
+  if (typeof value === "string") {
+    return value.trim();
+  }
+
+  if (Array.isArray(value) || (value && typeof value === "object")) {
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return "";
+    }
+  }
+
+  if (value === null || value === undefined) {
+    return "";
+  }
+
+  return String(value);
+};
 
 const createChatTitle = (messages: ChatMessage[]) => {
   const firstUserMessage = messages.find((message) => message.role === "user");
@@ -29,9 +49,9 @@ const createChatTitle = (messages: ChatMessage[]) => {
     return "新对话";
   }
 
-  return firstUserMessage.content.length > 18
-    ? `${firstUserMessage.content.slice(0, 18)}...`
-    : firstUserMessage.content;
+  const titleText = getChatMessageTitleText(firstUserMessage.content);
+
+  return titleText.length > 18 ? `${titleText.slice(0, 18)}...` : titleText || "新对话";
 };
 
 const createChatSession = (sessionId: string, timestamp = dayjs().toISOString()): ChatSession => {
@@ -52,9 +72,9 @@ interface ChatState {
   chatHistoryLoaded: boolean;
   chatError: string | null;
   streamingSessionId: string | null;
-  streamingReply: string;
-  streamingRawContent: string;
   streamingStatus: string;
+  streamingReply: string;
+  streamingRawOutput: ChatJsonValue | null;
   streamingRunning: boolean;
   streamingStopping: boolean;
   streamStopRequested: boolean;
@@ -151,9 +171,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
   chatHistoryLoaded: false,
   chatError: null,
   streamingSessionId: null,
-  streamingReply: "",
-  streamingRawContent: "",
   streamingStatus: "",
+  streamingReply: "",
+  streamingRawOutput: null,
   streamingRunning: false,
   streamingStopping: false,
   streamStopRequested: false,
@@ -180,13 +200,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
   hydrateActiveStream: async () => {
     try {
       const snapshot = await getOpenClawActiveStream();
-
       if (!snapshot) {
         set((state) => ({
           streamingSessionId: null,
-          streamingReply: "",
-          streamingRawContent: "",
           streamingStatus: "",
+          streamingReply: "",
+          streamingRawOutput: null,
           streamingRunning: state.streamingRunning ? false : state.streamingRunning,
           streamingStopping: false,
           streamStopRequested: false,
@@ -196,9 +215,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
       set({
         streamingSessionId: snapshot.sessionId,
-        streamingReply: snapshot.content,
-        streamingRawContent: snapshot.rawContent,
         streamingStatus: snapshot.status,
+        streamingReply: snapshot.reply,
+        streamingRawOutput: snapshot.rawOutput,
         streamingRunning: true,
         streamingStopping: false,
         streamStopRequested: false,
@@ -312,9 +331,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
   updateStreamingSnapshot: (snapshot) => {
     set((state) => ({
       streamingSessionId: snapshot.sessionId,
-      streamingReply: snapshot.content,
-      streamingRawContent: snapshot.rawContent,
       streamingStatus: snapshot.status,
+      streamingReply: snapshot.reply,
+      streamingRawOutput: snapshot.rawOutput,
       streamingRunning: true,
       streamingStopping:
         state.streamingSessionId === snapshot.sessionId ? state.streamingStopping : false,
@@ -325,9 +344,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
   clearStreamingState: () => {
     set({
       streamingSessionId: null,
-      streamingReply: "",
-      streamingRawContent: "",
       streamingStatus: "",
+      streamingReply: "",
+      streamingRawOutput: null,
       streamingRunning: false,
       streamingStopping: false,
       streamStopRequested: false,
@@ -355,9 +374,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
     get().setChatError(null);
     set({
       streamingSessionId: sessionId,
+      streamingStatus: "正在执行",
       streamingReply: "",
-      streamingRawContent: "",
-      streamingStatus: "OpenClaw 正在处理请求",
+      streamingRawOutput: null,
       streamingRunning: true,
       streamingStopping: false,
       streamStopRequested: false,
@@ -370,17 +389,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
       });
 
       if (get().streamStopRequested) {
-        const partialReply = get().streamingReply.trim();
-
-        if (partialReply) {
-          get().appendMessageToSession(sessionId, {
-            id: buildMessageId("assistant"),
-            role: "assistant",
-            content: partialReply,
-            createdAt: dayjs().toISOString(),
-          });
-        }
-
         get().appendMessageToSession(sessionId, {
           id: buildMessageId("system"),
           role: "system",
@@ -395,23 +403,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
       get().appendMessageToSession(result.sessionId, {
         id: buildMessageId("assistant"),
         role: "assistant",
-        content: result.reply || "OpenClaw 未返回可显示内容。",
+        content: result.reply,
+        rawContent: result.rawOutput ?? result.reply ?? "未返回可显示内容。",
         createdAt: dayjs().toISOString(),
       });
       get().clearStreamingState();
     } catch (reason) {
       if (get().streamStopRequested) {
-        const partialReply = get().streamingReply.trim();
-
-        if (partialReply) {
-          get().appendMessageToSession(sessionId, {
-            id: buildMessageId("assistant"),
-            role: "assistant",
-            content: partialReply,
-            createdAt: dayjs().toISOString(),
-          });
-        }
-
         get().appendMessageToSession(sessionId, {
           id: buildMessageId("system"),
           role: "system",
@@ -422,7 +420,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
         get().setChatError(
           reason instanceof Error
             ? reason.message
-            : "发送失败，请检查 OpenClaw runtime 和模型授权。",
+            : typeof reason === "string"
+              ? reason
+              : "发送失败，请检查 OpenClaw runtime 和模型授权。",
         );
       }
 
@@ -446,7 +446,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
         streamStopRequested: false,
         streamingStopping: false,
       });
-      get().setChatError(reason instanceof Error ? reason.message : "停止生成失败，请稍后重试。");
+      get().setChatError(
+        reason instanceof Error
+          ? reason.message
+          : typeof reason === "string"
+            ? reason
+            : "停止生成失败，请稍后重试。",
+      );
     }
   },
 }));

@@ -1,9 +1,19 @@
 export type ChatRole = "user" | "assistant" | "system";
 
+export type ChatJsonPrimitive = string | number | boolean | null;
+
+export type ChatJsonValue =
+  | ChatJsonPrimitive
+  | {
+      [key: string]: ChatJsonValue;
+    }
+  | ChatJsonValue[];
+
 export interface ChatMessage {
   id: string;
   role: ChatRole;
-  content: string;
+  content: ChatJsonValue;
+  rawContent?: ChatJsonValue;
   createdAt: string;
 }
 

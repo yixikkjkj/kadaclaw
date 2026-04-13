@@ -1,0 +1,26 @@
+[
+  {
+    "id": "c1",
+    "source": "complaint",
+    "channel": "browser",
+    "itemId": "1001",
+    "itemTitle": "轻量缓震跑鞋",
+    "content": "收到后异味比较重，申请退货。",
+    "replyContent": "客服建议退货退款。",
+    "rating": null,
+    "createdAt": "2026-04-05T11:00:00.000Z",
+    "raw": {}
+  },
+  {
+    "id": "c2",
+    "source": "complaint",
+    "channel": "browser",
+    "itemId": "1001",
+    "itemTitle": "轻量缓震跑鞋",
+    "content": "鞋头开胶，售后处理慢。",
+    "replyContent": "",
+    "rating": null,
+    "createdAt": "2026-04-06T11:00:00.000Z",
+    "raw": {}
+  }
+]

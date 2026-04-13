@@ -1,0 +1,8 @@
+{
+  "outputDir": "/tmp/product-link-voc-analyzer-run",
+  "urls": [
+    "https://item.taobao.com/item.htm?id=1234567890",
+    "https://detail.tmall.com/item.htm?id=2345678901"
+  ],
+  "collectedPath": ""
+}

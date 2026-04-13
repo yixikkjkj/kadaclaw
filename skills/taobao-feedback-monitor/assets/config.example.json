@@ -1,0 +1,28 @@
+{
+  "outputDir": "/tmp/taobao-feedback-monitor-config-run",
+  "reviews": {
+    "mode": "import",
+    "path": "sample-reviews.csv",
+    "browserPageUrl": "",
+    "browserExtractedPath": ""
+  },
+  "qa": {
+    "path": "sample-qa.csv"
+  },
+  "analysis": {
+    "qaTimeoutHours": 2,
+    "clusterThreshold": 3,
+    "keywords": ["质量差", "假货", "破损", "漏发", "漏水", "退货", "客服不回", "闷热", "线头", "做工一般"]
+  },
+  "alert": {
+    "enabled": false,
+    "provider": "feishu",
+    "webhook": ""
+  },
+  "top": {
+    "startDate": "2026-04-01 00:00:00",
+    "endDate": "2026-04-10 23:59:59",
+    "pageNo": 1,
+    "pageSize": 40
+  }
+}

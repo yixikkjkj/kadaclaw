@@ -46,6 +46,12 @@
   gap: 6px;
 }
 
+.controlUiSteps {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
 @media (max-width: 992px) {
   .settingsHeroGrid {
     grid-template-columns: 1fr;

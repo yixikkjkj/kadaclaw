@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { type ChatJsonValue } from "~/types";
 
 export interface OpenClawConfig {
   enabled: boolean;
@@ -87,14 +88,14 @@ export interface SendOpenClawMessagePayload {
 export interface OpenClawChatResponse {
   sessionId: string;
   reply: string;
-  rawOutput: string;
+  rawOutput: ChatJsonValue;
 }
 
 export interface OpenClawChatStreamSnapshot {
   sessionId: string;
-  content: string;
-  rawContent: string;
   status: string;
+  reply: string;
+  rawOutput: ChatJsonValue;
 }
 
 export function getOpenClawConfig() {
@@ -123,6 +124,10 @@ export function installBundledOpenClawRuntime() {
 
 export function getOpenClawDashboardUrl() {
   return invoke<DashboardUrlResult>("get_openclaw_dashboard_url");
+}
+
+export function openOpenClawDashboard() {
+  return invoke<DashboardUrlResult>("open_openclaw_dashboard");
 }
 
 export function getOpenClawRuntimeInfo() {

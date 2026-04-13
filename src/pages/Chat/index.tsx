@@ -1,22 +1,116 @@
-import { Alert, Avatar, Card, Flex, Spin, Typography } from "antd";
-import { useEffect, useRef, useState } from "react";
-import { type OpenClawAuthConfig, getOpenClawAuthConfig } from "~/api";
-import { ChatComposer } from "~/components/ChatComposer";
-import { selectActiveChatSession, useChatStore, useRuntimeStore } from "~/store";
+import { RobotOutlined, ToolOutlined, UserOutlined } from "@ant-design/icons";
+import { Alert, Button, Flex, Tag, Typography } from "antd";
+import classNames from "classnames";
+import dayjs from "dayjs";
+import { useEffect, useRef } from "react";
+import { useNavigate } from "react-router";
+import {
+  normalizeChatMessage,
+  type ChatMessageDisplayRole,
+  type NormalizedChatMessage,
+} from "~/common/chatMessage";
+import { ROUTE_PATHS } from "~/common/constants";
+import { ChatComposer, ChatMessageContent } from "~/components";
+import { selectActiveChatSession, useChatStore, useRuntimeStore, useSkillStore } from "~/store";
 import styles from "./index.css";
 
 const { Paragraph, Text, Title } = Typography;
 
+const normalizeStreamingStatus = (value: string) => {
+  const normalized = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+
+  const isTransient =
+    normalized.length === 0 ||
+    normalized === "thinking" ||
+    normalized === "waiting" ||
+    normalized === "waitingforagentreply" ||
+    normalized === "waitingforagentreplay" ||
+    normalized === "waitingforgatewayreply" ||
+    normalized === "waitingforgatewayagentreply" ||
+    normalized === "waitingforassistantreply" ||
+    (normalized.startsWith("waitingfor") && normalized.endsWith("reply"));
+
+  if (isTransient || value.trim() === "OpenClaw 正在处理请求") {
+    return "正在执行";
+  }
+
+  return value.trim() || "正在执行";
+};
+
+interface ChatMessageGroup {
+  id: string;
+  role: ChatMessageDisplayRole;
+  messages: NormalizedChatMessage[];
+}
+
+const buildMessageGroups = (messages: NormalizedChatMessage[]) => {
+  const groups: ChatMessageGroup[] = [];
+
+  messages.forEach((message) => {
+    const previousGroup = groups[groups.length - 1];
+
+    if (previousGroup && previousGroup.role === message.displayRole) {
+      previousGroup.messages.push(message);
+      return;
+    }
+
+    groups.push({
+      id: message.id,
+      role: message.displayRole,
+      messages: [message],
+    });
+  });
+
+  return groups;
+};
+
+const formatMessageTime = (value: string) => dayjs(value).format("HH:mm");
+
+const getGroupLabel = (role: ChatMessageDisplayRole) => {
+  if (role === "user") {
+    return "You";
+  }
+
+  if (role === "tool") {
+    return "Tool";
+  }
+
+  if (role === "system") {
+    return "System";
+  }
+
+  return "Assistant";
+};
+
+const renderGroupAvatar = (role: ChatMessageDisplayRole) => {
+  if (role === "user") {
+    return <UserOutlined />;
+  }
+
+  if (role === "tool") {
+    return <ToolOutlined />;
+  }
+
+  return <RobotOutlined />;
+};
+
 export const ChatPage = () => {
+  const navigate = useNavigate();
   const runtimeStatus = useRuntimeStore((state) => state.runtimeStatus);
+  const authConfig = useRuntimeStore((state) => state.authConfig);
+  const refreshAuthConfig = useRuntimeStore((state) => state.refreshAuthConfig);
   const activeChatSession = useChatStore(selectActiveChatSession);
   const chatError = useChatStore((state) => state.chatError);
-  const streamingReply = useChatStore((state) => state.streamingReply);
-  const streamingRawContent = useChatStore((state) => state.streamingRawContent);
-  const streamingStatus = useChatStore((state) => state.streamingStatus);
   const streamingRunning = useChatStore((state) => state.streamingRunning);
   const streamingSessionId = useChatStore((state) => state.streamingSessionId);
-  const [authConfig, setAuthConfig] = useState<OpenClawAuthConfig | null>(null);
+  const streamingStatus = useChatStore((state) => state.streamingStatus);
+  const streamingReply = useChatStore((state) => state.streamingReply);
+  const streamingRawOutput = useChatStore((state) => state.streamingRawOutput);
+  const installedSkills = useSkillStore((state) => state.installedSkills);
+  const readySkillIds = useSkillStore((state) => state.readySkillIds);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -26,28 +120,28 @@ export const ChatPage = () => {
     }
 
     container.scrollTop = container.scrollHeight;
-  }, [activeChatSession, chatError, streamingRawContent, streamingReply, streamingRunning]);
+  }, [activeChatSession, chatError, streamingRawOutput, streamingRunning, streamingStatus]);
 
   useEffect(() => {
-    let active = true;
+    void refreshAuthConfig();
+  }, [refreshAuthConfig, runtimeStatus]);
 
-    void (async () => {
-      try {
-        const config = await getOpenClawAuthConfig();
-        if (active) {
-          setAuthConfig(config);
-        }
-      } catch {
-        if (active) {
-          setAuthConfig(null);
-        }
-      }
-    })();
-
-    return () => {
-      active = false;
-    };
-  }, [runtimeStatus]);
+  const executionStatus = normalizeStreamingStatus(streamingStatus);
+  const activeSessionTitle = activeChatSession?.title || "New Chat";
+  const normalizedMessages = (activeChatSession?.messages ?? []).map((message) =>
+    normalizeChatMessage(message),
+  );
+  const messageGroups = buildMessageGroups(normalizedMessages);
+  const streamingPreviewMessage =
+    streamingRunning && streamingSessionId === activeChatSession?.id
+      ? normalizeChatMessage({
+          id: `streaming-${streamingSessionId}`,
+          role: "assistant",
+          content: streamingReply || executionStatus,
+          rawContent: streamingRawOutput ?? streamingReply ?? executionStatus,
+          createdAt: new Date().toISOString(),
+        })
+      : null;
 
   return (
     <Flex vertical className={styles.chatPanel}>
@@ -58,79 +152,111 @@ export const ChatPage = () => {
           showIcon
           title="当前模型授权尚未配置"
           description={`当前使用 ${authConfig.model}，需要前往设置页补充 ${authConfig.apiKeyEnvName}。`}
+          action={
+            <Button size="small" onClick={() => void navigate(ROUTE_PATHS.settings)}>
+              去设置
+            </Button>
+          }
         />
       ) : null}
 
+      <div className={styles.workspaceBar}>
+        <div>
+          <Text className={styles.workspaceEyebrow}>Workspace</Text>
+          <Title level={4} className={styles.workspaceTitle}>
+            {activeSessionTitle}
+          </Title>
+        </div>
+        <div className={styles.workspaceMeta}>
+          <Tag bordered={false} className={styles.workspaceTag}>
+            Runtime · {runtimeStatus}
+          </Tag>
+          <Tag bordered={false} className={styles.workspaceTag}>
+            Model · {authConfig?.model ?? "未配置"}
+          </Tag>
+          <Tag bordered={false} className={styles.workspaceTag}>
+            Skills · {readySkillIds.length}/{installedSkills.length}
+          </Tag>
+        </div>
+      </div>
+
       <div className={styles.chatMessageList} ref={scrollRef}>
-        <Card className={styles.welcomeCard}>
-          <Flex vertical gap={10}>
-            <Title level={5} style={{ margin: 0 }}>
-              开始一段新的对话
-            </Title>
-            <Paragraph type="secondary" style={{ marginBottom: 0 }}>
-              直接描述你的目标、问题或希望调用的技能。当前版本不再预置额外业务上下文，所有信息按你的输入为准。
-            </Paragraph>
-          </Flex>
-        </Card>
-
-        {(activeChatSession?.messages ?? []).map((message) => (
-          <div
-            key={message.id}
-            className={[
-              styles.chatRow,
-              message.role === "user"
-                ? styles.userRow
-                : message.role === "assistant"
-                  ? styles.assistantRow
-                  : styles.systemRow,
-            ].join(" ")}
-          >
-            <Avatar className={styles.chatAvatar}>
-              {message.role === "user" ? "你" : message.role === "assistant" ? "助" : "!"}
-            </Avatar>
-            <div className={styles.chatBubble}>
-              <Paragraph className={styles.chatContent}>{message.content}</Paragraph>
-            </div>
+        <div className={styles.conversationRail}>
+          <div className={styles.welcomeCard}>
+            <Flex vertical gap={10}>
+              <Text className={styles.welcomeEyebrow}>New Chat</Text>
+              <Title level={5} className={styles.welcomeTitle}>
+                描述目标，直接开始
+              </Title>
+              <Paragraph type="secondary" style={{ marginBottom: 0 }}>
+                直接描述目标、问题或希望调用的技能，系统会按你的输入继续执行。
+              </Paragraph>
+            </Flex>
           </div>
-        ))}
 
-        {streamingRunning && streamingSessionId === activeChatSession?.id ? (
-          <Flex vertical gap={10}>
-            <div className={[styles.chatRow, styles.assistantRow].join(" ")}>
-              <Avatar className={styles.chatAvatar}>助</Avatar>
-              {streamingReply ? (
-                <div className={[styles.chatBubble, styles.chatBubbleStreaming].join(" ")}>
-                  <div className={styles.chatMeta}>
-                    <Text type="secondary">助手</Text>
-                  </div>
-                  <Paragraph className={styles.chatContent}>
-                    {streamingReply}
-                    <span className={styles.streamingCursor} />
-                  </Paragraph>
-                </div>
-              ) : (
-                <div className={[styles.chatBubble, styles.chatBubbleLoading].join(" ")}>
-                  <Flex align="center" gap={8}>
-                    <Spin size="small" />
-                    <Text>{streamingStatus || "助手正在生成回复"}</Text>
-                  </Flex>
-                </div>
+          {messageGroups.map((group) => (
+            <div
+              key={group.id}
+              className={classNames(
+                styles.chatGroup,
+                group.role === "user"
+                  ? styles.userGroup
+                  : group.role === "assistant"
+                    ? styles.assistantGroup
+                    : group.role === "tool"
+                      ? styles.toolGroup
+                      : styles.systemGroup,
               )}
-            </div>
+            >
+              <div className={styles.chatAvatar}>{renderGroupAvatar(group.role)}</div>
 
-            <Card className={styles.traceCard}>
-              <Flex vertical gap={8}>
-                <Flex align="center" justify="space-between" gap={12}>
-                  <Text strong>执行进度</Text>
-                  <Text type="secondary">{streamingStatus || "OpenClaw 正在处理请求"}</Text>
-                </Flex>
-                <pre className={styles.traceContent}>
-                  {streamingRawContent || "等待 OpenClaw 输出更多执行信息..."}
-                </pre>
-              </Flex>
-            </Card>
-          </Flex>
-        ) : null}
+              <div className={styles.chatGroupMessages}>
+                {group.messages.map((message) => (
+                  <div key={message.id} className={styles.chatBubble}>
+                    <ChatMessageContent message={message} />
+                  </div>
+                ))}
+
+                <div className={styles.chatGroupFooter}>
+                  <Text className={styles.chatSenderName}>{getGroupLabel(group.role)}</Text>
+                  <Text className={styles.chatGroupTimestamp}>
+                    {formatMessageTime(group.messages[group.messages.length - 1].createdAt)}
+                  </Text>
+                </div>
+              </div>
+            </div>
+          ))}
+
+          {streamingPreviewMessage ? (
+            <div
+              className={classNames(
+                styles.chatGroup,
+                streamingPreviewMessage.displayRole === "tool"
+                  ? styles.toolGroup
+                  : styles.assistantGroup,
+              )}
+            >
+              <div className={styles.chatAvatar}>
+                {renderGroupAvatar(streamingPreviewMessage.displayRole)}
+              </div>
+              <div className={styles.chatGroupMessages}>
+                <div className={classNames(styles.chatBubble, styles.streamingBubble)}>
+                  <ChatMessageContent
+                    message={streamingPreviewMessage}
+                    streaming
+                    statusText={executionStatus}
+                  />
+                </div>
+                <div className={styles.chatGroupFooter}>
+                  <Text className={styles.chatSenderName}>
+                    {getGroupLabel(streamingPreviewMessage.displayRole)}
+                  </Text>
+                  <Text className={styles.chatGroupTimestamp}>live</Text>
+                </div>
+              </div>
+            </div>
+          ) : null}
+        </div>
       </div>
 
       {chatError ? (
@@ -143,10 +269,7 @@ export const ChatPage = () => {
         />
       ) : null}
 
-      <ChatComposer
-        authConfig={authConfig}
-        onAuthConfigChange={setAuthConfig}
-      />
+      <ChatComposer />
     </Flex>
   );
 };

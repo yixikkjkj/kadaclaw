@@ -1,0 +1,9 @@
+{
+  "id": "weekly-report-summarizer",
+  "name": "日报整理周报",
+  "category": "文档总结",
+  "summary": "把一周日报、任务清单或功能完成项整理成结构化中文周报，突出产出、进展、风险与下周计划。",
+  "author": "Codex",
+  "version": "0.1.0",
+  "entry": "SKILL.md"
+}

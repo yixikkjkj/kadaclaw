@@ -1,0 +1,14 @@
+{
+  "outputDir": "/tmp/product-voc-auto-report-run",
+  "pages": {
+    "sellerHome": "https://myseller.taobao.com/",
+    "reviews": "",
+    "qa": "",
+    "complaints": ""
+  },
+  "collected": {
+    "reviewsPath": "",
+    "qaPath": "",
+    "complaintsPath": ""
+  }
+}

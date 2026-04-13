@@ -1,0 +1,236 @@
+.messageContent {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.bubbleActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.iconButton {
+  color: #6a7f76;
+
+  &:hover {
+    color: #24463c !important;
+    background: rgba(31, 71, 60, 0.08) !important;
+  }
+}
+
+.streamingStatus {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #547266;
+}
+
+.streamingDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #2a8c75;
+  animation: pulse-dot 1.1s ease-in-out infinite;
+}
+
+.streamingLabel {
+  color: inherit;
+  font-size: 12px;
+  font-family:
+    "SFMono-Regular", "JetBrains Mono", "IBM Plex Mono", "Fira Code", "Menlo", "Consolas", monospace;
+}
+
+.textBlock {
+  color: inherit;
+  line-height: 1.68;
+
+  & p {
+    margin: 0;
+  }
+
+  & p + p,
+  & ul + p,
+  & ol + p,
+  & pre + p,
+  & blockquote + p {
+    margin-top: 0.9em;
+  }
+
+  & ul,
+  & ol {
+    margin: 0;
+    padding-left: 1.25em;
+  }
+
+  & li + li {
+    margin-top: 0.28em;
+  }
+
+  & pre {
+    overflow: auto;
+    margin: 0;
+    padding: 12px 14px;
+    border-radius: 12px;
+    background: rgba(18, 24, 21, 0.92);
+    color: #f2f7f4;
+    font-size: 12px;
+    line-height: 1.6;
+  }
+
+  & code {
+    font-family:
+      "SFMono-Regular", "JetBrains Mono", "IBM Plex Mono", "Fira Code", "Menlo", "Consolas",
+      monospace;
+    font-size: 0.94em;
+  }
+
+  & :not(pre) > code {
+    padding: 0.16em 0.42em;
+    border-radius: 7px;
+    background: rgba(31, 50, 43, 0.08);
+    color: #204238;
+  }
+
+  & a {
+    color: #175b4e;
+    text-decoration: underline;
+    text-underline-offset: 0.14em;
+  }
+
+  & blockquote {
+    margin: 0;
+    padding-left: 12px;
+    border-left: 3px solid rgba(25, 76, 65, 0.18);
+    color: rgba(23, 50, 43, 0.78);
+  }
+}
+
+.collapseSummary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 0;
+  cursor: pointer;
+  list-style: none;
+
+  &::-webkit-details-marker {
+    display: none;
+  }
+}
+
+.collapseTitle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #4d625a;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.collapseMeta {
+  color: #778780;
+  font-size: 12px;
+}
+
+.thinkingCollapse,
+.jsonCollapse,
+.toolTraceCollapse,
+.toolMessageCollapse {
+  border: 1px solid rgba(25, 42, 36, 0.08);
+  border-radius: 14px;
+  background: rgba(245, 247, 245, 0.9);
+  padding: 0 12px;
+}
+
+.thinkingBody {
+  padding: 0 0 12px;
+  color: #425950;
+  line-height: 1.62;
+
+  & p {
+    margin: 0;
+  }
+
+  & p + p {
+    margin-top: 0.75em;
+  }
+}
+
+.codeBlock,
+.toolPayload {
+  overflow: auto;
+  margin: 0;
+  padding: 0 0 12px;
+  color: #24342e;
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family:
+    "SFMono-Regular", "JetBrains Mono", "IBM Plex Mono", "Fira Code", "Menlo", "Consolas", monospace;
+}
+
+.toolList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 0 12px;
+}
+
+.toolCard {
+  border: 1px solid rgba(24, 40, 34, 0.08);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.toolHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.toolTitle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #2c473e;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.toolKind {
+  color: #587367;
+  font-size: 12px;
+  font-family:
+    "SFMono-Regular", "JetBrains Mono", "IBM Plex Mono", "Fira Code", "Menlo", "Consolas", monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.toolLabel {
+  display: block;
+  margin-top: 6px;
+  color: #6b7d76;
+  font-size: 12px;
+}
+
+.streamingPlaceholder {
+  color: #6c7f78;
+  font-size: 12px;
+}
+
+@keyframes pulse-dot {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}

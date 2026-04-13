@@ -1,0 +1,14 @@
+[
+  {
+    "id": "q1",
+    "source": "qa",
+    "channel": "browser",
+    "itemId": "1001",
+    "itemTitle": "轻量缓震跑鞋",
+    "content": "这双鞋偏大还是偏小？",
+    "replyContent": "偏小半码，宽脚建议大一码。",
+    "rating": null,
+    "createdAt": "2026-04-02T10:00:00.000Z",
+    "raw": {}
+  }
+]

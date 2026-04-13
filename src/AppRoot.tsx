@@ -14,6 +14,27 @@ import {
   launchOpenClawRuntime,
 } from "~/api";
 import { useChatStore, useRuntimeStore, useSkillStore } from "~/store";
+import { type ChatJsonValue } from "~/types";
+
+const RUNTIME_BOOTSTRAP_TIMEOUT_MS = 120000;
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string) {
+  return new Promise<T>((resolve, reject) => {
+    const timer = window.setTimeout(() => {
+      reject(new Error(message));
+    }, timeoutMs);
+
+    promise
+      .then((value) => {
+        window.clearTimeout(timer);
+        resolve(value);
+      })
+      .catch((error) => {
+        window.clearTimeout(timer);
+        reject(error);
+      });
+  });
+}
 
 export const AppRoot = () => {
   const setRuntimeState = useRuntimeStore((state) => state.setRuntimeState);
@@ -61,7 +82,11 @@ export const AppRoot = () => {
       try {
         void refreshRuntimeInfo();
         setRuntimeState("checking", "正在初始化");
-        const status = await ensureOpenClawRuntime();
+        const status = await withTimeout(
+          ensureOpenClawRuntime(),
+          RUNTIME_BOOTSTRAP_TIMEOUT_MS,
+          "检测 OpenClaw runtime 超时，请先进入高级配置页手动检查当前 runtime 状态。",
+        );
         setRuntimeState(status.reachable ? "ready" : "error", status.message);
         setShowOnboarding(!status.reachable);
         setBootstrapping(false);
@@ -101,9 +126,9 @@ export const AppRoot = () => {
 
     void listen<{
       sessionId: string;
-      content: string;
-      rawContent: string;
       status: string;
+      reply: string;
+      rawOutput: ChatJsonValue;
     }>("openclaw://chat-stream", (event) => {
       updateStreamingSnapshot(event.payload);
     })
@@ -134,11 +159,13 @@ export const AppRoot = () => {
     const timer = window.setInterval(() => {
       void getOpenClawActiveStream()
         .then((snapshot) => {
-          if (disposed || !snapshot) {
+          if (disposed) {
             return;
           }
 
-          updateStreamingSnapshot(snapshot);
+          if (snapshot) {
+            updateStreamingSnapshot(snapshot);
+          }
         })
         .catch((reason) => {
           if (!disposed) {

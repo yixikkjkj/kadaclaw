@@ -1,11 +1,11 @@
+import { type ChatJsonValue, type ChatRole } from "~/types";
 import { invoke, isTauri } from "@tauri-apps/api/core";
-
-export type StoredChatRole = "user" | "assistant" | "system";
 
 export interface StoredChatMessage {
   id: string;
-  role: StoredChatRole;
-  content: string;
+  role: ChatRole;
+  content: ChatJsonValue;
+  rawContent?: ChatJsonValue;
   createdAt: string;
 }
 

@@ -1,24 +1,22 @@
 import { Sender } from "@ant-design/x";
-import { message, Select } from "antd";
+import { Button, message, Select, Tag, Typography } from "antd";
 import { useEffect, useMemo, useState } from "react";
-import { type InstalledSkillRecord, type OpenClawAuthConfig, saveOpenClawAuthConfig } from "~/api";
+import { type InstalledSkillRecord, saveOpenClawAuthConfig } from "~/api";
 import { OPENCLAW_PROVIDER_OPTIONS } from "~/common/constants";
 import { useChatStore, useRuntimeStore, useSkillStore } from "~/store";
 import styles from "./index.css";
 
-interface ChatComposerProps {
-  authConfig: OpenClawAuthConfig | null;
-  onAuthConfigChange: (config: OpenClawAuthConfig) => void;
-}
+const { Text } = Typography;
 
 const buildSkillPrompt = (messageContent: string, skill: InstalledSkillRecord) =>
   `请优先使用技能「${skill.name}」（ID: ${skill.id}）处理下面这个请求；如果该技能不适用，请明确说明并继续完成任务。\n\n${messageContent}`;
 
-export const ChatComposer = ({
-  authConfig,
-  onAuthConfigChange,
-}: ChatComposerProps) => {
+export const ChatComposer = () => {
   const runtimeStatus = useRuntimeStore((state) => state.runtimeStatus);
+  const authConfig = useRuntimeStore((state) => state.authConfig);
+  const authConfigLoaded = useRuntimeStore((state) => state.authConfigLoaded);
+  const refreshAuthConfig = useRuntimeStore((state) => state.refreshAuthConfig);
+  const setAuthConfig = useRuntimeStore((state) => state.setAuthConfig);
   const streamingRunning = useChatStore((state) => state.streamingRunning);
   const streamingStopping = useChatStore((state) => state.streamingStopping);
   const sendMessage = useChatStore((state) => state.sendMessage);
@@ -31,6 +29,14 @@ export const ChatComposer = ({
   const [selectedSkillId, setSelectedSkillId] = useState<string | null>(null);
   const [savingModel, setSavingModel] = useState(false);
   const readySkills = installedSkills.filter((skill) => readySkillIds.includes(skill.id));
+
+  useEffect(() => {
+    if (authConfigLoaded) {
+      return;
+    }
+
+    void refreshAuthConfig();
+  }, [authConfigLoaded, refreshAuthConfig]);
 
   useEffect(() => {
     setSelectedModel(authConfig?.model ?? "");
@@ -64,6 +70,9 @@ export const ChatComposer = ({
   const selectedSkill = readySkills.find((skill) => skill.id === selectedSkillId) ?? null;
   const canInteract = runtimeStatus === "ready" || streamingRunning;
   const senderLoading = streamingRunning;
+  const promptHint = selectedSkill
+    ? `当前优先调用 ${selectedSkill.name}`
+    : "直接描述目标、限制条件或想调用的技能";
 
   const handleModelChange = async (nextModel: string) => {
     const providerConfig =
@@ -87,7 +96,7 @@ export const ChatComposer = ({
         apiKey: "",
         apiBaseUrl: authConfig?.provider === "custom" ? authConfig.apiBaseUrl ?? "" : "",
       });
-      onAuthConfigChange(saved);
+      setAuthConfig(saved);
     } catch (reason) {
       setSelectedModel(authConfig?.model ?? "");
       message.error(reason instanceof Error ? reason.message : "更新模型失败");
@@ -121,53 +130,81 @@ export const ChatComposer = ({
   };
 
   return (
-    <Sender
-      className={styles.sender}
-      value={inputValue}
-      onChange={(value) => setInputValue(value)}
-      onSubmit={handleSubmit}
-      loading={senderLoading}
-      onCancel={() => void handleCancel()}
-      submitType="enter"
-      disabled={!canInteract}
-      placeholder="输入你的问题，Enter 发送，Shift + Enter 换行"
-      autoSize={{ minRows: 3, maxRows: 6 }}
-      skill={
-        selectedSkill
-          ? {
-              value: selectedSkill.id,
-              title: `Skill · ${selectedSkill.name}`,
-              closable: {
-                onClose: (event) => {
-                  event.stopPropagation();
-                  setSelectedSkillId(null);
-                },
-              },
-            }
-          : undefined
-      }
-      footer={
-        <div className={styles.footer}>
-          <Select
-            className={styles.control}
-            value={selectedModel || undefined}
-            options={modelOptions}
-            onChange={(value) => void handleModelChange(value)}
-            placeholder="选择模型"
-            disabled={streamingRunning}
-            loading={savingModel}
-          />
-          <Select
-            allowClear
-            className={styles.control}
-            value={selectedSkillId ?? undefined}
-            options={readySkillOptions}
-            onChange={(value) => setSelectedSkillId(value)}
-            placeholder="自动选择 skill"
-            disabled={streamingRunning || readySkillOptions.length === 0}
-          />
+    <div className={styles.senderDock}>
+      <div className={styles.senderMetaBar}>
+        <div className={styles.senderMetaGroup}>
+          <Text className={styles.senderLabel}>Mode</Text>
+          <Tag bordered={false} className={styles.senderTag}>
+            {streamingRunning ? "Running" : "Ready"}
+          </Tag>
+          {selectedSkill ? (
+            <Tag bordered={false} className={styles.senderTagAccent}>
+              Skill · {selectedSkill.name}
+            </Tag>
+          ) : null}
         </div>
-      }
-    />
+        <Text className={styles.senderHint}>{promptHint}</Text>
+      </div>
+
+      <Sender
+        className={styles.sender}
+        value={inputValue}
+        onChange={(value) => setInputValue(value)}
+        onSubmit={handleSubmit}
+        loading={senderLoading}
+        onCancel={() => void handleCancel()}
+        submitType="enter"
+        disabled={!canInteract}
+        placeholder="Ask anything about your task"
+        autoSize={{ minRows: 3, maxRows: 7 }}
+        skill={
+          selectedSkill
+            ? {
+                value: selectedSkill.id,
+                title: `Skill · ${selectedSkill.name}`,
+                closable: {
+                  onClose: (event) => {
+                    event.stopPropagation();
+                    setSelectedSkillId(null);
+                  },
+                },
+              }
+            : undefined
+        }
+        footer={
+          <div className={styles.footer}>
+            <div className={styles.footerControls}>
+              <Select
+                className={styles.control}
+                value={selectedModel || undefined}
+                options={modelOptions}
+                onChange={(value) => void handleModelChange(value)}
+                placeholder="选择模型"
+                disabled={streamingRunning}
+                loading={savingModel}
+              />
+              <Select
+                allowClear
+                className={styles.control}
+                value={selectedSkillId ?? undefined}
+                options={readySkillOptions}
+                onChange={(value) => setSelectedSkillId(value)}
+                placeholder="选择 skill"
+                disabled={streamingRunning || readySkillOptions.length === 0}
+              />
+            </div>
+            <div className={styles.footerActions}>
+              <Text className={styles.footerTip}>Enter 发送</Text>
+              <Text className={styles.footerTip}>Shift + Enter 换行</Text>
+              {streamingRunning ? (
+                <Button size="small" onClick={() => void handleCancel()} loading={streamingStopping}>
+                  停止
+                </Button>
+              ) : null}
+            </div>
+          </div>
+        }
+      />
+    </div>
   );
 };

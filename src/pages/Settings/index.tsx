@@ -21,9 +21,11 @@ import { OPENCLAW_PROVIDER_OPTIONS } from "~/common/constants";
 import {
   getOpenClawAuthConfig,
   getOpenClawConfig,
+  getOpenClawDashboardUrl,
   getOpenClawLocalSkillsDirs,
   installBundledOpenClawRuntime,
   launchOpenClawRuntime,
+  openOpenClawDashboard,
   pickOpenClawLocalSkillsDir,
   type OpenClawAuthConfig,
   type OpenClawConfig,
@@ -95,6 +97,7 @@ export function SettingsPage() {
   const [runtimeInfo, setRuntimeInfo] = useState<RuntimeInfoResult | null>(null);
   const [selfCheckResult, setSelfCheckResult] = useState<OpenClawSelfCheckResult | null>(null);
   const [authConfig, setAuthConfig] = useState<OpenClawAuthConfig | null>(null);
+  const [dashboardUrl, setDashboardUrl] = useState("");
   const [localSkillsDirsInput, setLocalSkillsDirsInput] = useState("");
   const [loading, setLoading] = useState(false);
   const setRuntimeState = useRuntimeStore((state) => state.setRuntimeState);
@@ -309,6 +312,46 @@ export function SettingsPage() {
 
   const selfChecks = selfCheckResult?.items ?? [];
 
+  const refreshDashboardUrl = async () => {
+    setLoading(true);
+    try {
+      const result = await getOpenClawDashboardUrl();
+      setDashboardUrl(result.url);
+      message.success("已获取 Dashboard URL");
+    } catch (error) {
+      message.error(`获取 Dashboard URL 失败: ${String(error)}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const openDashboard = async () => {
+    setLoading(true);
+    try {
+      const result = await openOpenClawDashboard();
+      setDashboardUrl(result.url);
+      message.success("已在浏览器打开 Control UI");
+    } catch (error) {
+      message.error(`打开 Control UI 失败: ${String(error)}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const copyDashboardUrl = async () => {
+    if (!dashboardUrl) {
+      message.warning("请先获取 Dashboard URL");
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(dashboardUrl);
+      message.success("Dashboard URL 已复制");
+    } catch (error) {
+      message.error(`复制失败: ${String(error)}`);
+    }
+  };
+
   return (
     <Flex vertical gap={20}>
       <Card className={styles.settingsHero}>
@@ -413,12 +456,12 @@ export function SettingsPage() {
             </Col>
             <Col xs={24} md={12}>
               <Form.Item label="Base URL" name="baseUrl" rules={[{ required: true }]}>
-                <Input placeholder="http://127.0.0.1:18789" />
+                <Input placeholder="http://127.0.0.1:18795" />
               </Form.Item>
             </Col>
             <Col xs={24} md={12}>
               <Form.Item label="健康检查路径" name="healthPath" rules={[{ required: true }]}>
-                <Input placeholder="/" />
+                <Input placeholder="/v1/models" />
               </Form.Item>
             </Col>
             <Col xs={24} md={12}>
@@ -433,7 +476,7 @@ export function SettingsPage() {
             </Col>
             <Col xs={24}>
               <Form.Item label="启动参数" name="args">
-                <Input placeholder="gateway run --allow-unconfigured --auth none --port 18789 --force" />
+                <Input placeholder="gateway run --allow-unconfigured --auth none --port 18795 --force" />
               </Form.Item>
             </Col>
             <Col xs={24}>
@@ -602,6 +645,46 @@ export function SettingsPage() {
               {authConfig?.apiKeyConfigured ? "已配置" : "未配置"}
             </Descriptions.Item>
           </Descriptions>
+        </Flex>
+      </Card>
+
+      <Card title="Control UI">
+        <Flex vertical gap={16}>
+          <Alert
+            type="info"
+            showIcon
+            message="遇到 gateway token missing 时这样处理"
+            description="先打开 Dashboard URL，再把页面里提供的 gateway token 粘贴到 Control UI settings。模型 API Key 不能填在这里。"
+          />
+
+          <Paragraph type="secondary">
+            Control UI 的授权依赖 gateway token，不是模型 API key。如果你看到
+            `unauthorized: gateway token missing`，通常说明还没有从 Dashboard URL 获取 token。
+          </Paragraph>
+
+          <Input
+            readOnly
+            value={dashboardUrl}
+            placeholder="先点击“获取 Dashboard URL”或“打开 Control UI”"
+          />
+
+          <Flex gap={8} wrap>
+            <Button type="primary" loading={loading} onClick={() => void openDashboard()}>
+              打开 Control UI
+            </Button>
+            <Button loading={loading} onClick={() => void refreshDashboardUrl()}>
+              获取 Dashboard URL
+            </Button>
+            <Button disabled={!dashboardUrl} onClick={() => void copyDashboardUrl()}>
+              复制 Dashboard URL
+            </Button>
+          </Flex>
+
+          <div className={styles.controlUiSteps}>
+            <Text>1. 点击“打开 Control UI”或复制 Dashboard URL 到浏览器打开。</Text>
+            <Text>2. 从页面拿到 gateway token。</Text>
+            <Text>3. 把 token 粘贴到 Control UI 的 Settings。</Text>
+          </div>
         </Flex>
       </Card>
 

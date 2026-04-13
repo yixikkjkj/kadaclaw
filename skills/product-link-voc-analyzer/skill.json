@@ -1,0 +1,9 @@
+{
+  "id": "product-link-voc-analyzer",
+  "name": "商品链接消费者分析",
+  "category": "商品分析",
+  "summary": "基于商品页链接采集详情、评价和问答，输出单商品分析报告和多商品汇总报告。",
+  "author": "Codex",
+  "version": "0.1.0",
+  "entry": "SKILL.md"
+}

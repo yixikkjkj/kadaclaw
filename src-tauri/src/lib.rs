@@ -4,13 +4,22 @@ use serde_json::{json, Map, Value};
 use std::collections::HashSet;
 use std::env;
 use std::fs;
-use std::io::{BufReader, Cursor, Read};
+use std::io::Cursor;
+use std::net::{TcpStream, ToSocketAddrs};
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Output, Stdio};
+use std::process::{Command, Output, Stdio};
 use std::sync::Mutex;
 use std::thread;
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, Manager};
+
+const BUNDLED_GATEWAY_PORT: u16 = 18795;
+const LEGACY_BUNDLED_GATEWAY_PORT: u16 = 18789;
+const OLDER_BUNDLED_GATEWAY_PORT: u16 = 18791;
+const DEFAULT_OPENCLAW_HEALTH_PATH: &str = "/v1/models";
+const OPENCLAW_HEALTH_PROBE_TIMEOUT_SECS: u64 = 5;
+const OPENCLAW_HEALTH_PROBE_ATTEMPTS: usize = 2;
+const OPENCLAW_RUNTIME_READY_TIMEOUT_SECS: u64 = 90;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -51,6 +60,95 @@ struct InstallOpenClawResult {
 #[serde(rename_all = "camelCase")]
 struct DashboardUrlResult {
   url: String,
+}
+
+fn bundled_gateway_base_url() -> String {
+  format!("http://127.0.0.1:{BUNDLED_GATEWAY_PORT}")
+}
+
+fn build_gateway_run_args(port: u16) -> Vec<String> {
+  vec![
+    "gateway".to_string(),
+    "run".to_string(),
+    "--allow-unconfigured".to_string(),
+    "--auth".to_string(),
+    "none".to_string(),
+    "--port".to_string(),
+    port.to_string(),
+    "--force".to_string(),
+  ]
+}
+
+fn has_gateway_port_arg(args: &[String], port: u16) -> bool {
+  args
+    .windows(2)
+    .any(|pair| pair[0] == "--port" && pair[1] == port.to_string())
+}
+
+fn replace_gateway_port_arg(args: &[String], port: u16) -> Vec<String> {
+  if args.is_empty() {
+    return build_gateway_run_args(port);
+  }
+
+  let mut next_args = Vec::with_capacity(args.len() + 2);
+  let mut index = 0;
+  let mut replaced = false;
+
+  while index < args.len() {
+    let current = &args[index];
+    if current == "--port" && index + 1 < args.len() {
+      next_args.push(current.clone());
+      next_args.push(port.to_string());
+      index += 2;
+      replaced = true;
+      continue;
+    }
+
+    next_args.push(current.clone());
+    index += 1;
+  }
+
+  if !replaced {
+    next_args.push("--port".to_string());
+    next_args.push(port.to_string());
+  }
+
+  next_args
+}
+
+fn open_external_url(url: &str) -> Result<(), String> {
+  #[cfg(target_os = "windows")]
+  let output = Command::new("cmd")
+    .args(["/C", "start", "", url])
+    .output()
+    .map_err(|error| format!("无法打开浏览器: {error}"))?;
+
+  #[cfg(target_os = "macos")]
+  let output = Command::new("open")
+    .arg(url)
+    .output()
+    .map_err(|error| format!("无法打开浏览器: {error}"))?;
+
+  #[cfg(all(unix, not(target_os = "macos")))]
+  let output = Command::new("xdg-open")
+    .arg(url)
+    .output()
+    .map_err(|error| format!("无法打开浏览器: {error}"))?;
+
+  if output.status.success() {
+    return Ok(());
+  }
+
+  let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+  let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+
+  Err(if !stderr.is_empty() {
+    stderr
+  } else if !stdout.is_empty() {
+    stdout
+  } else {
+    "打开浏览器失败".to_string()
+  })
 }
 
 #[derive(Debug, Serialize)]
@@ -123,22 +221,23 @@ struct SendOpenClawMessagePayload {
 struct OpenClawChatResponse {
   session_id: String,
   reply: String,
-  raw_output: String,
+  raw_output: Value,
 }
 
 #[derive(Debug, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 struct OpenClawChatStreamEvent {
   session_id: String,
-  content: String,
-  raw_content: String,
   status: String,
+  reply: String,
+  raw_output: Value,
 }
 
 #[derive(Default)]
 struct ActiveChatProcessState {
   pid: Mutex<Option<u32>>,
   stream: Mutex<Option<OpenClawChatStreamEvent>>,
+  stop_requested: Mutex<bool>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -146,7 +245,8 @@ struct ActiveChatProcessState {
 struct ChatHistoryMessage {
   id: String,
   role: String,
-  content: String,
+  content: Value,
+  raw_content: Option<Value>,
   created_at: String,
 }
 
@@ -249,20 +349,11 @@ impl Default for OpenClawConfig {
     Self {
       enabled: true,
       display_name: "OpenClaw Runtime".to_string(),
-      base_url: "http://127.0.0.1:18789".to_string(),
-      health_path: "/".to_string(),
+      base_url: bundled_gateway_base_url(),
+      health_path: DEFAULT_OPENCLAW_HEALTH_PATH.to_string(),
       model: "anthropic/claude-opus-4-6".to_string(),
       command: "openclaw".to_string(),
-      args: vec![
-        "gateway".to_string(),
-        "run".to_string(),
-        "--allow-unconfigured".to_string(),
-        "--auth".to_string(),
-        "none".to_string(),
-        "--port".to_string(),
-        "18789".to_string(),
-        "--force".to_string(),
-      ],
+      args: build_gateway_run_args(BUNDLED_GATEWAY_PORT),
       working_directory: String::new(),
     }
   }
@@ -386,6 +477,26 @@ fn set_active_chat_stream(
   Ok(())
 }
 
+fn set_active_chat_stop_requested(
+  state: &ActiveChatProcessState,
+  requested: bool,
+) -> Result<(), String> {
+  let mut guard = state
+    .stop_requested
+    .lock()
+    .map_err(|_| "无法锁定当前聊天停止状态".to_string())?;
+  *guard = requested;
+  Ok(())
+}
+
+fn get_active_chat_stop_requested(state: &ActiveChatProcessState) -> Result<bool, String> {
+  let guard = state
+    .stop_requested
+    .lock()
+    .map_err(|_| "无法锁定当前聊天停止状态".to_string())?;
+  Ok(*guard)
+}
+
 fn clear_active_chat_pid(state: &ActiveChatProcessState, pid: u32) -> Result<(), String> {
   let mut guard = state.pid.lock().map_err(|_| "无法锁定当前聊天进程状态".to_string())?;
 
@@ -394,6 +505,17 @@ fn clear_active_chat_pid(state: &ActiveChatProcessState, pid: u32) -> Result<(),
   }
 
   Ok(())
+}
+
+fn emit_chat_stream_event(
+  app: &AppHandle,
+  state: &ActiveChatProcessState,
+  event: OpenClawChatStreamEvent,
+) -> Result<(), String> {
+  set_active_chat_stream(state, Some(event.clone()))?;
+  app
+    .emit("openclaw://chat-stream", event)
+    .map_err(|error| format!("发送 OpenClaw 流式事件失败: {error}"))
 }
 
 fn terminate_process(pid: u32) -> Result<bool, String> {
@@ -433,278 +555,314 @@ fn terminate_process(pid: u32) -> Result<bool, String> {
   })
 }
 
-fn strip_terminal_control_sequences(input: &str) -> String {
-  let mut output = String::new();
-  let chars: Vec<char> = input.chars().collect();
-  let mut index = 0;
 
-  while index < chars.len() {
-    let ch = chars[index];
+fn default_openclaw_config_path() -> Result<PathBuf, String> {
+  let home = env::var("HOME")
+    .or_else(|_| env::var("USERPROFILE"))
+    .map_err(|_| "无法定位 OpenClaw 配置目录".to_string())?;
+  Ok(PathBuf::from(home).join(".openclaw").join("openclaw.json"))
+}
 
-    if ch == '\u{1b}' {
-      index += 1;
-
-      if index >= chars.len() {
-        break;
-      }
-
-      match chars[index] {
-        '[' => {
-          index += 1;
-          while index < chars.len() {
-            let current = chars[index];
-            index += 1;
-
-            if ('@'..='~').contains(&current) {
-              break;
-            }
-          }
-        },
-        ']' => {
-          index += 1;
-          while index < chars.len() {
-            let current = chars[index];
-            index += 1;
-
-            if current == '\u{7}' {
-              break;
-            }
-
-            if current == '\u{1b}' && chars.get(index) == Some(&'\\') {
-              index += 1;
-              break;
-            }
-          }
-        },
-        _ => {
-          index += 1;
-        },
-      }
-
-      continue;
-    }
-
-    if ch == '\u{8}' {
-      output.pop();
-      index += 1;
-      continue;
-    }
-
-    if ch == '\r' {
-      index += 1;
-      continue;
-    }
-
-    if ch.is_control() && ch != '\n' && ch != '\t' {
-      index += 1;
-      continue;
-    }
-
-    output.push(ch);
-    index += 1;
+fn gateway_config_path_for_runtime(_app: &AppHandle, config: &OpenClawConfig) -> Result<PathBuf, String> {
+  if let Ok(prefix) = bundled_prefix_from_command(&config.command) {
+    ensure_bundled_layout(&prefix)?;
+    return Ok(runtime_config_path(&prefix));
   }
 
-  output
+  default_openclaw_config_path()
 }
 
-fn is_openclaw_transient_status_line(line: &str) -> bool {
-  let normalized = line
-    .chars()
-    .filter(|ch| ch.is_ascii_alphanumeric())
-    .flat_map(|ch| ch.to_lowercase())
-    .collect::<String>();
+fn ensure_gateway_responses_endpoint_enabled(app: &AppHandle, config: &OpenClawConfig) -> Result<(), String> {
+  let path = gateway_config_path_for_runtime(app, config)?;
+  let mut root = ensure_runtime_config_object(&path)?;
+  let root_obj = root.as_object_mut().ok_or_else(|| "网关配置对象无效".to_string())?;
+  let mut changed = false;
 
-  normalized == "thinking"
-    || normalized == "waiting"
-    || normalized == "waitingforagentreply"
-    || normalized == "waitingforagentreplay"
-    || normalized == "waitingforgatewayreply"
-    || normalized == "waitingforgatewayagentreply"
-    || normalized == "waitingforassistantreply"
-    || (normalized.starts_with("waitingfor") && normalized.ends_with("reply"))
+  let gateway_value = root_obj.entry("gateway".to_string()).or_insert_with(|| json!({}));
+  if !gateway_value.is_object() {
+    *gateway_value = json!({});
+    changed = true;
+  }
+  let gateway_obj = gateway_value
+    .as_object_mut()
+    .ok_or_else(|| "gateway 配置无效".to_string())?;
+
+  let http_value = gateway_obj.entry("http".to_string()).or_insert_with(|| json!({}));
+  if !http_value.is_object() {
+    *http_value = json!({});
+    changed = true;
+  }
+  let http_obj = http_value
+    .as_object_mut()
+    .ok_or_else(|| "gateway.http 配置无效".to_string())?;
+
+  let endpoints_value = http_obj.entry("endpoints".to_string()).or_insert_with(|| json!({}));
+  if !endpoints_value.is_object() {
+    *endpoints_value = json!({});
+    changed = true;
+  }
+  let endpoints_obj = endpoints_value
+    .as_object_mut()
+    .ok_or_else(|| "gateway.http.endpoints 配置无效".to_string())?;
+
+  let responses_value = endpoints_obj
+    .entry("responses".to_string())
+    .or_insert_with(|| json!({}));
+  if !responses_value.is_object() {
+    *responses_value = json!({});
+    changed = true;
+  }
+  let responses_obj = responses_value
+    .as_object_mut()
+    .ok_or_else(|| "gateway.http.endpoints.responses 配置无效".to_string())?;
+  let already_enabled = responses_obj
+    .get("enabled")
+    .and_then(Value::as_bool)
+    .unwrap_or(false);
+  if !already_enabled {
+    responses_obj.insert("enabled".to_string(), Value::Bool(true));
+    changed = true;
+  }
+
+  if changed {
+    write_runtime_config_value(&path, &root)?;
+  }
+
+  Ok(())
 }
 
-fn is_openclaw_single_char_status_fragment(line: &str) -> bool {
-  let trimmed = line.trim();
-  let mut chars = trimmed.chars();
-  let Some(ch) = chars.next() else {
-    return false;
+fn read_gateway_bearer_token(app: &AppHandle, config: &OpenClawConfig) -> Result<Option<String>, String> {
+  let path = gateway_config_path_for_runtime(app, config)?;
+  let root = ensure_runtime_config_object(&path)?;
+  let auth = root
+    .get("gateway")
+    .and_then(|value| value.get("auth"))
+    .and_then(Value::as_object);
+
+  let Some(auth) = auth else {
+    return Ok(None);
   };
 
-  chars.next().is_none()
-    && (ch.is_ascii_alphanumeric() || matches!(ch, '◓' | '◐' | '◑' | '◒' | '●' | '○'))
-}
+  let mode = auth
+    .get("mode")
+    .and_then(Value::as_str)
+    .map(str::trim)
+    .unwrap_or("none");
 
-fn is_openclaw_status_fragment(line: &str) -> bool {
-  let trimmed = line.trim();
-  if trimmed.is_empty() {
-    return false;
+  if mode == "none" {
+    return Ok(None);
   }
 
-  if is_openclaw_single_char_status_fragment(trimmed) {
-    return true;
+  if mode == "token" {
+    return Ok(auth
+      .get("token")
+      .and_then(Value::as_str)
+      .map(str::trim)
+      .filter(|value| !value.is_empty())
+      .map(ToString::to_string));
   }
 
-  let normalized = trimmed
-    .chars()
-    .filter(|ch| ch.is_ascii_alphanumeric())
-    .flat_map(|ch| ch.to_lowercase())
-    .collect::<String>();
+  if mode == "password" {
+    return Ok(auth
+      .get("password")
+      .and_then(Value::as_str)
+      .map(str::trim)
+      .filter(|value| !value.is_empty())
+      .map(ToString::to_string));
+  }
 
-  !normalized.is_empty()
-    && normalized.len() <= 12
-    && (normalized == "waiting"
-      || normalized == "for"
-      || normalized == "agent"
-      || normalized == "assistant"
-      || normalized == "gateway"
-      || normalized == "reply"
-      || normalized == "thinking")
+  Ok(None)
 }
 
-fn normalize_openclaw_output_lines(raw_output: &str) -> Vec<String> {
-  let cleaned = strip_terminal_control_sequences(raw_output);
-  let raw_lines = cleaned.lines().collect::<Vec<_>>();
-  let mut lines = Vec::new();
-  let mut skip_banner_tagline = false;
-  let mut index = 0;
+fn build_openresponses_endpoint(base_url: &str) -> String {
+  format!("{}/v1/responses", base_url.trim_end_matches('/'))
+}
 
-  while index < raw_lines.len() {
-    let line = raw_lines[index];
-    let trimmed = line.trim();
+fn extract_openresponses_text_from_item(item: &Value, parts: &mut Vec<String>) {
+  let item_type = item
+    .get("type")
+    .and_then(Value::as_str)
+    .map(str::trim)
+    .unwrap_or_default();
 
-    if trimmed.is_empty() {
-      index += 1;
-      continue;
-    }
+  if item_type == "message" {
+    if let Some(content_items) = item.get("content").and_then(Value::as_array) {
+      for content_item in content_items {
+        let content_type = content_item
+          .get("type")
+          .and_then(Value::as_str)
+          .map(str::trim)
+          .unwrap_or_default();
 
-    if trimmed.starts_with("🦞 OpenClaw ") || trimmed.starts_with("OpenClaw ") {
-      skip_banner_tagline = true;
-      index += 1;
-      continue;
-    }
-
-    if skip_banner_tagline {
-      skip_banner_tagline = false;
-      if line.starts_with(' ') || line.starts_with('\t') {
-        index += 1;
-        continue;
-      }
-    }
-
-    if trimmed == "│" || trimmed == "◇" {
-      index += 1;
-      continue;
-    }
-
-    if is_openclaw_status_fragment(trimmed) {
-      let start = index;
-      let mut collapsed = String::new();
-
-      while index < raw_lines.len() {
-        let candidate = raw_lines[index].trim();
-        if !is_openclaw_status_fragment(candidate) {
-          break;
-        }
-        collapsed.push_str(candidate);
-        index += 1;
-      }
-
-      if index - start >= 2 {
-        let collapsed_trimmed = collapsed
-          .trim_start_matches(|ch: char| matches!(ch, '◓' | '◐' | '◑' | '◒' | '●' | '○'))
-          .trim()
-          .to_string();
-
-        if !collapsed_trimmed.is_empty() {
-          let collapsed_normalized = collapsed_trimmed
-            .chars()
-            .filter(|ch| ch.is_ascii_alphanumeric())
-            .flat_map(|ch| ch.to_lowercase())
-            .collect::<String>();
-
-          if is_openclaw_transient_status_line(&collapsed_trimmed)
-            || is_openclaw_transient_status_line(&collapsed_normalized)
-          {
-            continue;
+        if (content_type == "output_text" || content_type == "text" || content_type == "input_text")
+          && content_item.get("text").and_then(Value::as_str).is_some()
+        {
+          if let Some(text) = content_item.get("text").and_then(Value::as_str) {
+            let trimmed = text.trim();
+            if !trimmed.is_empty() {
+              parts.push(trimmed.to_string());
+            }
           }
-
-          lines.push(collapsed_trimmed);
         }
-        continue;
       }
-
-      lines.extend(raw_lines[start..index].iter().map(|item| item.trim().to_string()));
-      continue;
     }
-
-    lines.push(trimmed.to_string());
-    index += 1;
+    return;
   }
 
-  lines
+  if item_type == "output_text" || item_type == "text" {
+    if let Some(text) = item.get("text").and_then(Value::as_str) {
+      let trimmed = text.trim();
+      if !trimmed.is_empty() {
+        parts.push(trimmed.to_string());
+      }
+    }
+  }
 }
 
-fn summarize_openclaw_raw_output(raw_output: &str) -> String {
-  const MAX_LINES: usize = 18;
-  let lines = normalize_openclaw_output_lines(raw_output);
-  if lines.len() <= MAX_LINES {
-    return lines.join("\n");
+fn extract_openresponses_reply(response: &Value) -> String {
+  if let Some(output_text) = response.get("output_text").and_then(Value::as_str) {
+    let trimmed = output_text.trim();
+    if !trimmed.is_empty() {
+      return trimmed.to_string();
+    }
   }
 
-  lines[lines.len() - MAX_LINES..].join("\n")
+  let mut parts = Vec::new();
+
+  if let Some(items) = response.get("output").and_then(Value::as_array) {
+    for item in items {
+      extract_openresponses_text_from_item(item, &mut parts);
+    }
+  }
+
+  parts.join("\n\n").trim().to_string()
 }
 
-fn extract_openclaw_status(raw_output: &str) -> String {
-  let lines = normalize_openclaw_output_lines(raw_output);
+fn build_openresponses_stream_snapshot(reply: &str, output_items: &[Value]) -> Value {
+  let mut output = Vec::new();
 
-  for line in lines.iter().rev() {
-    if is_openclaw_transient_status_line(line)
-      || line.starts_with("Calling")
-      || line.starts_with("Running")
-      || line.starts_with("Using")
-      || line.starts_with("Opening")
-      || line.starts_with("Waiting")
-    {
-      return line.clone();
-    }
+  let trimmed_reply = reply.trim();
+  if !trimmed_reply.is_empty() {
+    output.push(json!({
+      "type": "message",
+      "content": [
+        {
+          "type": "output_text",
+          "text": trimmed_reply,
+        }
+      ]
+    }));
   }
 
-  lines
-    .last()
-    .cloned()
-    .unwrap_or_else(|| "OpenClaw 正在处理请求".to_string())
+  output.extend(output_items.iter().cloned());
+
+  json!({
+    "output": output,
+  })
 }
 
-fn sanitize_openclaw_output(raw_output: &str) -> String {
-  let mut lines = Vec::new();
-  for line in normalize_openclaw_output_lines(raw_output) {
-    let trimmed = line.trim();
+fn resolve_openresponses_stream_event_type(
+  payload: &Value,
+  event_type_hint: Option<&str>,
+) -> String {
+  payload
+    .get("type")
+    .and_then(Value::as_str)
+    .map(str::trim)
+    .filter(|value| !value.is_empty())
+    .map(ToString::to_string)
+    .or_else(|| {
+      event_type_hint
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToString::to_string)
+    })
+    .unwrap_or_default()
+}
 
-    if is_openclaw_transient_status_line(trimmed) {
-      continue;
+fn upsert_openresponses_output_item(output_items: &mut Vec<Value>, next_item: &Value) {
+  let next_type = next_item.get("type").and_then(Value::as_str).unwrap_or_default();
+  let next_id = next_item
+    .get("id")
+    .and_then(Value::as_str)
+    .or_else(|| next_item.get("call_id").and_then(Value::as_str))
+    .unwrap_or_default();
+
+  if !next_id.is_empty() {
+    if let Some(existing) = output_items.iter_mut().find(|item| {
+      item
+        .get("id")
+        .and_then(Value::as_str)
+        .or_else(|| item.get("call_id").and_then(Value::as_str))
+        == Some(next_id)
+    }) {
+      *existing = next_item.clone();
+      return;
     }
-
-    if trimmed.starts_with("Your task has been queued;")
-      || trimmed.starts_with("Gateway agent failed;")
-      || trimmed.starts_with("Gateway target:")
-      || trimmed.starts_with("Source:")
-      || trimmed.starts_with("Config:")
-      || trimmed.starts_with("Bind:")
-      || trimmed.starts_with("Docs:")
-      || trimmed.starts_with("MEDIA:")
-    {
-      continue;
-    }
-
-    if trimmed.contains("[diagnostic] lane task error:") {
-      continue;
-    }
-
-    lines.push(trimmed.to_string());
   }
 
-  lines.join("\n")
+  if !next_type.is_empty() {
+    if let Some(existing) = output_items.iter_mut().rev().find(|item| {
+      item.get("type").and_then(Value::as_str) == Some(next_type)
+        && item
+          .get("id")
+          .and_then(Value::as_str)
+          .or_else(|| item.get("call_id").and_then(Value::as_str))
+          .unwrap_or_default()
+          .is_empty()
+    }) {
+      *existing = next_item.clone();
+      return;
+    }
+  }
+
+  output_items.push(next_item.clone());
+}
+
+fn append_openresponses_function_call_arguments(output_items: &mut [Value], delta: &str) {
+  let Some(current_item) = output_items
+    .iter_mut()
+    .rev()
+    .find(|item| item.get("type").and_then(Value::as_str) == Some("function_call"))
+  else {
+    return;
+  };
+
+  let current_arguments = current_item
+    .get("arguments")
+    .and_then(Value::as_str)
+    .unwrap_or_default()
+    .to_string();
+  let next_arguments = format!("{current_arguments}{delta}");
+
+  if let Some(object) = current_item.as_object_mut() {
+    object.insert("arguments".to_string(), Value::String(next_arguments));
+  }
+}
+
+fn parse_sse_event_block(block: &str) -> Option<(Option<String>, String)> {
+  let mut event_type: Option<String> = None;
+  let mut data_lines = Vec::new();
+
+  for line in block.lines() {
+    if let Some(value) = line.strip_prefix("event:") {
+      let normalized = value.trim();
+      if !normalized.is_empty() {
+        event_type = Some(normalized.to_string());
+      }
+      continue;
+    }
+
+    if let Some(value) = line.strip_prefix("data:") {
+      data_lines.push(value.trim_start().to_string());
+    }
+  }
+
+  if data_lines.is_empty() {
+    return None;
+  }
+
+  Some((event_type, data_lines.join("\n")))
 }
 
 #[cfg(target_os = "windows")]
@@ -719,149 +877,6 @@ fn build_openclaw_command(command_path: &str) -> Command {
   Command::new(command_path)
 }
 
-#[cfg(target_os = "macos")]
-fn spawn_streaming_openclaw_command(
-  config: &OpenClawConfig,
-  session_id: &str,
-  message: &str,
-  thinking: Option<String>,
-) -> Result<Child, String> {
-  let mut command = Command::new("script");
-  command.arg("-q").arg("/dev/null").arg(&config.command);
-  command
-    .arg("agent")
-    .arg("--session-id")
-    .arg(session_id)
-    .arg("--message")
-    .arg(message);
-
-  if let Some(thinking) = thinking {
-    command.arg("--thinking").arg(thinking);
-  }
-
-  if !config.working_directory.is_empty() {
-    command.current_dir(&config.working_directory);
-  }
-
-  apply_openclaw_env(&mut command, config);
-  command
-    .env("NO_COLOR", "1")
-    .env("CLICOLOR", "0")
-    .env("TERM", "dumb")
-    .stdout(Stdio::piped())
-    .stderr(Stdio::piped())
-    .spawn()
-    .map_err(|error| format!("无法通过伪终端启动 OpenClaw: {error}"))
-}
-
-#[cfg(all(unix, not(target_os = "macos")))]
-fn spawn_streaming_openclaw_command(
-  config: &OpenClawConfig,
-  session_id: &str,
-  message: &str,
-  thinking: Option<String>,
-) -> Result<Child, String> {
-  let escape_shell_arg = |value: &str| -> String { format!("'{}'", value.replace('\'', "'\"'\"'")) };
-  let mut script = vec![
-    escape_shell_arg(&config.command),
-    "agent".to_string(),
-    "--session-id".to_string(),
-    escape_shell_arg(session_id),
-    "--message".to_string(),
-    escape_shell_arg(message),
-  ];
-
-  if let Some(thinking) = thinking {
-    script.push("--thinking".to_string());
-    script.push(escape_shell_arg(&thinking));
-  }
-
-  let mut command = Command::new("script");
-  command.arg("-qefc").arg(script.join(" ")).arg("/dev/null");
-
-  if !config.working_directory.is_empty() {
-    command.current_dir(&config.working_directory);
-  }
-
-  apply_openclaw_env(&mut command, config);
-  command
-    .env("NO_COLOR", "1")
-    .env("CLICOLOR", "0")
-    .env("TERM", "dumb")
-    .stdout(Stdio::piped())
-    .stderr(Stdio::piped())
-    .spawn()
-    .map_err(|error| format!("无法通过伪终端启动 OpenClaw: {error}"))
-}
-
-#[cfg(not(unix))]
-fn spawn_streaming_openclaw_command(
-  config: &OpenClawConfig,
-  session_id: &str,
-  message: &str,
-  thinking: Option<String>,
-) -> Result<Child, String> {
-  let mut command = build_openclaw_command(&config.command);
-  command
-    .arg("agent")
-    .arg("--session-id")
-    .arg(session_id)
-    .arg("--message")
-    .arg(message);
-
-  if let Some(thinking) = thinking {
-    command.arg("--thinking").arg(thinking);
-  }
-
-  if !config.working_directory.is_empty() {
-    command.current_dir(&config.working_directory);
-  }
-
-  apply_openclaw_env(&mut command, config);
-  command
-    .stdout(Stdio::piped())
-    .stderr(Stdio::piped())
-    .spawn()
-    .map_err(|error| format!("无法向 OpenClaw 发送消息: {error}"))
-}
-
-fn read_stream_chunk(reader: &mut BufReader<impl Read>, pending: &mut Vec<u8>) -> Result<String, String> {
-  let mut buffer = [0u8; 1024];
-  let size = reader
-    .read(&mut buffer)
-    .map_err(|error| format!("读取 OpenClaw 流式输出失败: {error}"))?;
-
-  if size == 0 {
-    if pending.is_empty() {
-      return Ok(String::new());
-    }
-
-    let tail = String::from_utf8_lossy(pending).to_string();
-    pending.clear();
-    return Ok(tail);
-  }
-
-  pending.extend_from_slice(&buffer[..size]);
-
-  match std::str::from_utf8(pending) {
-    Ok(content) => {
-      let chunk = content.to_string();
-      pending.clear();
-      Ok(chunk)
-    },
-    Err(error) if error.error_len().is_none() => {
-      let chunk = String::from_utf8_lossy(&pending[..error.valid_up_to()]).to_string();
-      let tail = pending[error.valid_up_to()..].to_vec();
-      *pending = tail;
-      Ok(chunk)
-    },
-    Err(_) => {
-      let chunk = String::from_utf8_lossy(pending).to_string();
-      pending.clear();
-      Ok(chunk)
-    },
-  }
-}
 
 fn read_config(app: &AppHandle) -> Result<OpenClawConfig, String> {
   let path = config_path(app)?;
@@ -873,8 +888,7 @@ fn read_config(app: &AppHandle) -> Result<OpenClawConfig, String> {
   let mut config: OpenClawConfig =
     serde_json::from_str(&content).map_err(|error| format!("配置文件格式错误: {error}"))?;
 
-  if is_legacy_bundled_probe_config(app, &config) {
-    config.base_url = "http://127.0.0.1:18789".to_string();
+  if is_bundled_command(app, &config.command) && migrate_bundled_gateway_config(&mut config) {
     let body = serde_json::to_string_pretty(&config).map_err(|error| format!("无法序列化迁移后的配置: {error}"))?;
     fs::write(&path, body).map_err(|error| format!("无法更新配置: {error}"))?;
   }
@@ -909,7 +923,7 @@ fn write_config(app: &AppHandle, payload: SaveConfigPayload) -> Result<OpenClawC
 fn normalize_health_path(value: &str) -> String {
   let trimmed = value.trim();
   if trimmed.is_empty() {
-    "/".to_string()
+    DEFAULT_OPENCLAW_HEALTH_PATH.to_string()
   } else if trimmed.starts_with('/') {
     trimmed.to_string()
   } else {
@@ -947,27 +961,80 @@ fn build_endpoint(base_url: &str, health_path: &str) -> String {
 
 async fn probe_status(app: &AppHandle, config: &OpenClawConfig) -> OpenClawStatus {
   let executable_found = executable_exists(&config.command);
-  let endpoint = build_endpoint(&config.base_url, &config.health_path);
   let bundled = is_bundled_command(app, &config.command);
-
-  let response = reqwest::Client::new()
-    .get(&endpoint)
-    .timeout(Duration::from_secs(2))
-    .send()
-    .await;
-  let (reachable, http_status, message) = match response {
-    Ok(response) => {
-      let status = response.status();
-      let ok = status.is_success() || status == StatusCode::NOT_FOUND;
-      let message = if ok {
-        format!("OpenClaw runtime 已响应 {}", status.as_u16())
-      } else {
-        format!("OpenClaw runtime 返回状态 {}", status.as_u16())
-      };
-      (ok, Some(status.as_u16()), message)
-    },
-    Err(error) => (false, None, format!("无法连接到 OpenClaw runtime: {error}")),
+  let normalized_health_path = normalize_health_path(&config.health_path);
+  let configured_endpoint = build_endpoint(&config.base_url, &normalized_health_path);
+  let fallback_endpoint = if normalized_health_path != DEFAULT_OPENCLAW_HEALTH_PATH {
+    Some(build_endpoint(&config.base_url, DEFAULT_OPENCLAW_HEALTH_PATH))
+  } else {
+    None
   };
+
+  let probe_endpoint = |endpoint: String| async move {
+    let client = reqwest::Client::new();
+    let mut last_error = None;
+
+    for attempt in 0..OPENCLAW_HEALTH_PROBE_ATTEMPTS {
+      let response = client
+        .get(&endpoint)
+        .timeout(Duration::from_secs(OPENCLAW_HEALTH_PROBE_TIMEOUT_SECS))
+        .send()
+        .await;
+
+      match response {
+        Ok(response) => {
+          let status = response.status();
+          let ok = status.is_success() || status == StatusCode::NOT_FOUND;
+          let message = if ok {
+            format!("OpenClaw runtime 已响应 {}", status.as_u16())
+          } else {
+            format!("OpenClaw runtime 返回状态 {}", status.as_u16())
+          };
+          return (ok, Some(status.as_u16()), message);
+        },
+        Err(error) => {
+          last_error = Some(error.to_string());
+          if attempt + 1 < OPENCLAW_HEALTH_PROBE_ATTEMPTS {
+            thread::sleep(Duration::from_millis(250));
+          }
+        },
+      }
+    }
+
+    let detail = last_error.unwrap_or_else(|| "未知错误".to_string());
+    (false, None, format!("无法连接到 OpenClaw runtime: {detail}"))
+  };
+
+  let (mut reachable, mut http_status, mut message) = probe_endpoint(configured_endpoint.clone()).await;
+  let mut endpoint = configured_endpoint.clone();
+
+  if !reachable {
+    if let Some(fallback_endpoint) = fallback_endpoint {
+      let (fallback_reachable, fallback_http_status, fallback_message) = probe_endpoint(fallback_endpoint.clone()).await;
+      if fallback_reachable {
+        reachable = true;
+        http_status = fallback_http_status;
+        endpoint = fallback_endpoint;
+        message = format!(
+          "当前健康检查路径 {} 未通过，但 {} 可达；建议将健康检查路径更新为 {}。{}",
+          normalized_health_path, DEFAULT_OPENCLAW_HEALTH_PATH, DEFAULT_OPENCLAW_HEALTH_PATH, fallback_message
+        );
+      }
+    }
+  }
+
+  if !reachable {
+    if let Some(discovered_base_url) = read_gateway_status_base_url(config) {
+      if normalize_base_url(&discovered_base_url) != normalize_base_url(&config.base_url) {
+        message = format!(
+          "{}；另外检测到另一个 gateway 地址为 {}，但当前配置要求使用 {}",
+          message,
+          normalize_base_url(&discovered_base_url),
+          normalize_base_url(&config.base_url),
+        );
+      }
+    }
+  }
 
   OpenClawStatus {
     configured: !config.base_url.is_empty() && !config.command.is_empty(),
@@ -989,8 +1056,36 @@ fn is_bundled_command(app: &AppHandle, command: &str) -> bool {
     .unwrap_or(false)
 }
 
-fn is_legacy_bundled_probe_config(app: &AppHandle, config: &OpenClawConfig) -> bool {
-  is_bundled_command(app, &config.command) && config.base_url.trim() == "http://127.0.0.1:18791"
+fn is_legacy_bundled_gateway_base_url(base_url: &str) -> bool {
+  let normalized = base_url.trim().trim_end_matches('/');
+  normalized == format!("http://127.0.0.1:{LEGACY_BUNDLED_GATEWAY_PORT}")
+    || normalized == format!("http://127.0.0.1:{OLDER_BUNDLED_GATEWAY_PORT}")
+}
+
+fn should_migrate_bundled_health_path(health_path: &str) -> bool {
+  let normalized = health_path.trim();
+  normalized.is_empty() || normalized == "/"
+}
+
+fn migrate_bundled_gateway_config(config: &mut OpenClawConfig) -> bool {
+  let uses_legacy_base_url = is_legacy_bundled_gateway_base_url(&config.base_url);
+  let uses_legacy_port_arg = has_gateway_port_arg(&config.args, LEGACY_BUNDLED_GATEWAY_PORT)
+    || has_gateway_port_arg(&config.args, OLDER_BUNDLED_GATEWAY_PORT);
+  let should_upgrade_health_path = should_migrate_bundled_health_path(&config.health_path);
+  let mut changed = false;
+
+  if uses_legacy_base_url || uses_legacy_port_arg {
+    config.base_url = bundled_gateway_base_url();
+    config.args = replace_gateway_port_arg(&config.args, BUNDLED_GATEWAY_PORT);
+    changed = true;
+  }
+
+  if should_upgrade_health_path {
+    config.health_path = DEFAULT_OPENCLAW_HEALTH_PATH.to_string();
+    changed = true;
+  }
+
+  changed
 }
 
 fn apply_openclaw_env(command: &mut Command, config: &OpenClawConfig) {
@@ -1003,6 +1098,11 @@ fn apply_openclaw_env(command: &mut Command, config: &OpenClawConfig) {
     command.env("OPENCLAW_HOME", &prefix);
     command.env("OPENCLAW_STATE_DIR", &state_dir);
     command.env("OPENCLAW_CONFIG_PATH", &config_path);
+    command.env("OPENCLAW_SKIP_ACPX_RUNTIME", "1");
+    if let Some(port) = extract_base_url_port(&config.base_url) {
+      command.env("OPENCLAW_GATEWAY_PORT", port);
+    }
+    command.env("OPENCLAW_LAUNCHD_LABEL", "ai.openclaw.gateway.kadaclaw");
   }
 }
 
@@ -1649,6 +1749,110 @@ fn parse_marker_line(output: &str, marker: &str) -> Option<String> {
     .find_map(|line| line.trim().strip_prefix(marker).map(|value| value.trim().to_string()))
 }
 
+fn normalize_base_url(value: &str) -> String {
+  value.trim().trim_end_matches('/').to_string()
+}
+
+fn extract_base_url_authority(value: &str) -> Option<String> {
+  let normalized = normalize_base_url(value);
+  let host_part = normalized
+    .strip_prefix("http://")
+    .or_else(|| normalized.strip_prefix("https://"))
+    .unwrap_or(&normalized);
+  let authority = host_part.split('/').next().unwrap_or(host_part).trim();
+  if authority.is_empty() {
+    None
+  } else {
+    Some(authority.to_string())
+  }
+}
+
+fn extract_base_url_port(value: &str) -> Option<String> {
+  let normalized = normalize_base_url(value);
+  let host_part = normalized
+    .strip_prefix("http://")
+    .or_else(|| normalized.strip_prefix("https://"))
+    .unwrap_or(&normalized);
+  host_part
+    .rsplit_once(':')
+    .map(|(_, port)| port.trim().to_string())
+    .filter(|port| !port.is_empty() && port.chars().all(|char| char.is_ascii_digit()))
+}
+
+fn gateway_listener_detected(base_url: &str) -> bool {
+  let Some(authority) = extract_base_url_authority(base_url) else {
+    return false;
+  };
+
+  let Ok(addresses) = authority.to_socket_addrs() else {
+    return false;
+  };
+
+  addresses.into_iter().any(|address| TcpStream::connect_timeout(&address, Duration::from_millis(400)).is_ok())
+}
+
+fn configured_gateway_detected(config: &OpenClawConfig) -> bool {
+  if gateway_listener_detected(&config.base_url) {
+    return true;
+  }
+
+  read_gateway_status_base_url(config)
+    .map(|base_url| normalize_base_url(&base_url) == normalize_base_url(&config.base_url))
+    .unwrap_or(false)
+}
+
+fn dashboard_url_to_base_url(value: &str) -> String {
+  value
+    .trim()
+    .split('#')
+    .next()
+    .unwrap_or(value)
+    .trim()
+    .trim_end_matches('/')
+    .to_string()
+}
+
+fn probe_target_to_base_url(value: &str) -> Option<String> {
+  let trimmed = value.trim();
+  if trimmed.is_empty() {
+    return None;
+  }
+
+  if let Some(rest) = trimmed.strip_prefix("ws://") {
+    return Some(format!("http://{rest}"));
+  }
+
+  if let Some(rest) = trimmed.strip_prefix("wss://") {
+    return Some(format!("https://{rest}"));
+  }
+
+  if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
+    return Some(dashboard_url_to_base_url(trimmed));
+  }
+
+  None
+}
+
+fn read_gateway_status_base_url(config: &OpenClawConfig) -> Option<String> {
+  let mut command = build_openclaw_command(&config.command);
+  command.args(["gateway", "status"]);
+  if !config.working_directory.is_empty() {
+    command.current_dir(&config.working_directory);
+  }
+  apply_openclaw_env(&mut command, config);
+
+  let output = run_command_with_timeout(&mut command, Duration::from_secs(8), "OpenClaw gateway 状态命令").ok()?;
+  let stdout = String::from_utf8_lossy(&output.stdout);
+  let stderr = String::from_utf8_lossy(&output.stderr);
+  let combined = format!("{stdout}\n{stderr}");
+
+  parse_marker_line(&combined, "Dashboard URL:")
+    .or_else(|| parse_marker_line(&combined, "Dashboard:"))
+    .map(|value| dashboard_url_to_base_url(&value))
+    .or_else(|| parse_marker_line(&combined, "Probe target:").and_then(|value| probe_target_to_base_url(&value)))
+    .filter(|value| !value.is_empty())
+}
+
 fn write_windows_command_shim(wrapper_path: &Path, target_command: &str) -> Result<(), String> {
   ensure_parent_dir(wrapper_path)?;
   let escaped_target = target_command.replace('"', "\"\"");
@@ -1906,19 +2110,27 @@ async fn launch_openclaw_runtime(app: AppHandle) -> Result<OpenClawStatus, Strin
     });
   }
 
-  spawn_runtime_process(&config)?;
+  let gateway_detected = configured_gateway_detected(&config);
+  if !gateway_detected {
+    spawn_runtime_process(&config)?;
+  }
 
-  let mut status = wait_for_runtime_ready(&app, &config, Duration::from_secs(10)).await;
+  let mut status = wait_for_runtime_ready(&app, &config, Duration::from_secs(OPENCLAW_RUNTIME_READY_TIMEOUT_SECS)).await;
   status.message = if status.reachable {
-    "OpenClaw runtime 已启动并连接".to_string()
+    if gateway_detected {
+      "检测到 OpenClaw runtime 正在启动，现已连接".to_string()
+    } else {
+      "OpenClaw runtime 已启动并连接".to_string()
+    }
+  } else if gateway_detected {
+    "检测到 OpenClaw runtime 已占用当前端口，但等待就绪超时".to_string()
   } else {
     "已发起 OpenClaw runtime 启动命令，但等待就绪超时".to_string()
   };
   Ok(status)
 }
 
-#[tauri::command]
-fn get_openclaw_dashboard_url(app: AppHandle) -> Result<DashboardUrlResult, String> {
+fn resolve_openclaw_dashboard_url(app: &AppHandle) -> Result<DashboardUrlResult, String> {
   let config = read_config(&app)?;
   let mut command = build_openclaw_command(&config.command);
   command.arg("dashboard").arg("--no-open");
@@ -1950,6 +2162,18 @@ fn get_openclaw_dashboard_url(app: AppHandle) -> Result<DashboardUrlResult, Stri
 }
 
 #[tauri::command]
+fn get_openclaw_dashboard_url(app: AppHandle) -> Result<DashboardUrlResult, String> {
+  resolve_openclaw_dashboard_url(&app)
+}
+
+#[tauri::command]
+fn open_openclaw_dashboard(app: AppHandle) -> Result<DashboardUrlResult, String> {
+  let result = resolve_openclaw_dashboard_url(&app)?;
+  open_external_url(&result.url)?;
+  Ok(result)
+}
+
+#[tauri::command]
 async fn ensure_openclaw_runtime(app: AppHandle) -> Result<OpenClawStatus, String> {
   let config = read_config(&app)?;
   if let Ok(prefix) = bundled_prefix_from_command(&config.command) {
@@ -1964,21 +2188,32 @@ async fn ensure_openclaw_runtime(app: AppHandle) -> Result<OpenClawStatus, Strin
     return Ok(initial);
   }
 
-  let app_clone = app.clone();
-  let config_clone = config.clone();
-  tauri::async_runtime::spawn_blocking(move || -> Result<(), String> {
-    spawn_runtime_process(&config_clone)?;
-    let _ = app_clone;
-    Ok(())
-  })
-  .await
-  .map_err(|error| format!("自动启动任务失败: {error}"))??;
+  let gateway_detected = configured_gateway_detected(&config);
+  if !gateway_detected {
+    let app_clone = app.clone();
+    let config_clone = config.clone();
+    tauri::async_runtime::spawn_blocking(move || -> Result<(), String> {
+      spawn_runtime_process(&config_clone)?;
+      let _ = app_clone;
+      Ok(())
+    })
+    .await
+    .map_err(|error| format!("自动启动任务失败: {error}"))??;
+  }
 
-  let mut status = wait_for_runtime_ready(&app, &config, Duration::from_secs(10)).await;
+  let mut status = wait_for_runtime_ready(&app, &config, Duration::from_secs(OPENCLAW_RUNTIME_READY_TIMEOUT_SECS)).await;
   if status.reachable {
-    status.message = "OpenClaw runtime 已自动启动并连接".to_string();
+    status.message = if gateway_detected {
+      "检测到 OpenClaw runtime 正在启动，现已连接".to_string()
+    } else {
+      "OpenClaw runtime 已自动启动并连接".to_string()
+    };
   } else {
-    status.message = "已尝试自动启动 OpenClaw runtime，但等待就绪超时".to_string();
+    status.message = if gateway_detected {
+      "检测到 OpenClaw runtime 已占用当前端口，但等待就绪超时".to_string()
+    } else {
+      "已尝试自动启动 OpenClaw runtime，但等待就绪超时".to_string()
+    };
   }
   Ok(status)
 }
@@ -1995,17 +2230,31 @@ async fn send_openclaw_message(
   }
 
   sync_openclaw_skills_extra_dir(&app)?;
+  ensure_gateway_responses_endpoint_enabled(&app, &config)?;
 
-  let status = probe_status(&app, &config).await;
+  let mut status = probe_status(&app, &config).await;
   if !status.reachable && executable_exists(&config.command) {
-    let config_clone = config.clone();
-    tauri::async_runtime::spawn_blocking(move || -> Result<(), String> {
-      spawn_runtime_process(&config_clone)?;
-      thread::sleep(Duration::from_secs(2));
-      Ok(())
-    })
-    .await
-    .map_err(|error| format!("自动启动聊天 runtime 失败: {error}"))??;
+    if !configured_gateway_detected(&config) {
+      let config_clone = config.clone();
+      tauri::async_runtime::spawn_blocking(move || -> Result<(), String> {
+        spawn_runtime_process(&config_clone)?;
+        Ok(())
+      })
+      .await
+      .map_err(|error| format!("自动启动聊天 runtime 失败: {error}"))??;
+    }
+
+    status = wait_for_runtime_ready(&app, &config, Duration::from_secs(OPENCLAW_RUNTIME_READY_TIMEOUT_SECS)).await;
+  }
+
+  if !status.reachable {
+    return Err(format!(
+      "OpenClaw runtime 未就绪，无法请求 {}。当前健康检查地址: {}。启动命令: {}。状态: {}",
+      build_openresponses_endpoint(&config.base_url),
+      status.endpoint,
+      config.command,
+      status.message,
+    ));
   }
 
   let session_id = payload
@@ -2017,151 +2266,194 @@ async fn send_openclaw_message(
     .thinking
     .map(|value| value.trim().to_string())
     .filter(|value| !value.is_empty());
-  let config_clone = config.clone();
-  let app_clone = app.clone();
+  let active_chat_process = app.state::<ActiveChatProcessState>();
+  set_active_chat_pid(active_chat_process.inner(), None)?;
+  set_active_chat_stop_requested(active_chat_process.inner(), false)?;
+  emit_chat_stream_event(
+    &app,
+    active_chat_process.inner(),
+    OpenClawChatStreamEvent {
+      session_id: session_id.clone(),
+      status: "Waiting for gateway response".to_string(),
+      reply: String::new(),
+      raw_output: build_openresponses_stream_snapshot("", &[]),
+    },
+  )?;
 
-  tauri::async_runtime::spawn_blocking(move || -> Result<OpenClawChatResponse, String> {
-    let mut child = spawn_streaming_openclaw_command(&config_clone, &session_id, &message, thinking)?;
-    let stdout = child
-      .stdout
-      .take()
-      .ok_or_else(|| "无法读取 OpenClaw stdout".to_string())?;
-    let stderr = child
-      .stderr
-      .take()
-      .ok_or_else(|| "无法读取 OpenClaw stderr".to_string())?;
-    let child_pid = child.id();
-    let active_chat_process = app_clone.state::<ActiveChatProcessState>();
-    set_active_chat_pid(active_chat_process.inner(), Some(child_pid))?;
+  let mut request_body = json!({
+    "model": "openclaw/default",
+    "input": message.clone(),
+    "user": session_id.clone(),
+    "stream": true,
+  });
 
-    let stream_session_id = session_id.clone();
-    let stream_app = app_clone.clone();
-    {
-      let active_chat_process = app_clone.state::<ActiveChatProcessState>();
-      set_active_chat_stream(
-        active_chat_process.inner(),
-        Some(OpenClawChatStreamEvent {
-          session_id: stream_session_id.clone(),
-          content: String::new(),
-          raw_content: String::new(),
-          status: "OpenClaw 正在处理请求".to_string(),
-        }),
-      )?;
+  if let Some(thinking) = thinking {
+    request_body["reasoning"] = json!({
+      "effort": thinking,
+    });
+  }
+
+  let endpoint = build_openresponses_endpoint(&config.base_url);
+  let bearer_token = read_gateway_bearer_token(&app, &config)?;
+  let mut request = reqwest::Client::new()
+    .post(&endpoint)
+    .timeout(Duration::from_secs(120))
+    .json(&request_body)
+    .header("content-type", "application/json")
+    .header("x-openclaw-session-key", session_id.as_str())
+    .header("x-openclaw-agent-id", "main");
+
+  if let Some(token) = bearer_token {
+    request = request.bearer_auth(token);
+  }
+
+  let mut response = request
+    .send()
+    .await
+    .map_err(|error| {
+      format!(
+        "调用 OpenClaw gateway responses 失败: {error}。请求地址: {}。健康检查地址: {}",
+        endpoint,
+        status.endpoint,
+      )
+    })?;
+
+  let response_status = response.status();
+
+  if !response_status.is_success() {
+    let response_body = response
+      .text()
+      .await
+      .map_err(|error| format!("读取 OpenClaw gateway responses 结果失败: {error}"))?;
+    set_active_chat_stream(active_chat_process.inner(), None)?;
+    let detail = response_body.trim();
+    return Err(if detail.is_empty() {
+      format!("OpenClaw gateway responses 返回状态 {}", response_status.as_u16())
+    } else {
+      detail.to_string()
+    });
+  }
+
+  let mut reply = String::new();
+  let mut output_items: Vec<Value> = Vec::new();
+  let mut response_json: Option<Value> = None;
+  let mut buffer = String::new();
+
+  loop {
+    if get_active_chat_stop_requested(active_chat_process.inner())? {
+      set_active_chat_stream(active_chat_process.inner(), None)?;
+      set_active_chat_stop_requested(active_chat_process.inner(), false)?;
+      return Ok(OpenClawChatResponse {
+        session_id,
+        reply: reply.clone(),
+        raw_output: build_openresponses_stream_snapshot(&reply, &output_items),
+      });
     }
-    let stdout_handle = thread::spawn(move || -> Result<String, String> {
-      let mut reader = BufReader::new(stdout);
-      let mut pending = Vec::new();
-      let mut raw_output = String::new();
-      let mut last_emitted = String::new();
 
-      loop {
-        let chunk = read_stream_chunk(&mut reader, &mut pending)?;
-        if chunk.is_empty() {
-          break;
-        }
+    let Some(chunk) = response
+      .chunk()
+      .await
+      .map_err(|error| format!("读取 OpenClaw gateway responses 流失败: {error}"))?
+    else {
+      break;
+    };
 
-        raw_output.push_str(&chunk);
-        let visible_output = sanitize_openclaw_output(&raw_output);
-        let raw_content = summarize_openclaw_raw_output(&raw_output);
-        let status = extract_openclaw_status(&raw_output);
+    buffer.push_str(&String::from_utf8_lossy(&chunk).replace("\r\n", "\n"));
 
-        if visible_output != last_emitted {
-          let active_chat_process = stream_app.state::<ActiveChatProcessState>();
-          set_active_chat_stream(
-            active_chat_process.inner(),
-            Some(OpenClawChatStreamEvent {
-              session_id: stream_session_id.clone(),
-              content: visible_output.clone(),
-              raw_content: raw_content.clone(),
-              status: status.clone(),
-            }),
-          )?;
-          stream_app
-            .emit(
-              "openclaw://chat-stream",
-              OpenClawChatStreamEvent {
-                session_id: stream_session_id.clone(),
-                content: visible_output.clone(),
-                raw_content: raw_content.clone(),
-                status: status.clone(),
-              },
-            )
-            .map_err(|error| format!("发送 OpenClaw 流式事件失败: {error}"))?;
-          last_emitted = visible_output;
-        } else {
-          let active_chat_process = stream_app.state::<ActiveChatProcessState>();
-          set_active_chat_stream(
-            active_chat_process.inner(),
-            Some(OpenClawChatStreamEvent {
-              session_id: stream_session_id.clone(),
-              content: visible_output.clone(),
-              raw_content: raw_content.clone(),
-              status: status.clone(),
-            }),
-          )?;
-          stream_app
-            .emit(
-              "openclaw://chat-stream",
-              OpenClawChatStreamEvent {
-                session_id: stream_session_id.clone(),
-                content: visible_output.clone(),
-                raw_content: raw_content.clone(),
-                status: status.clone(),
-              },
-            )
-            .map_err(|error| format!("发送 OpenClaw 流式事件失败: {error}"))?;
-        }
+    while let Some(separator_index) = buffer.find("\n\n") {
+      let block = buffer[..separator_index].to_string();
+      buffer.drain(..separator_index + 2);
+
+      let Some((event_type_hint, data)) = parse_sse_event_block(&block) else {
+        continue;
+      };
+
+      if data.trim() == "[DONE]" {
+        break;
       }
 
-      Ok(raw_output)
-    });
+      let payload = serde_json::from_str::<Value>(&data)
+        .map_err(|error| format!("OpenClaw gateway SSE 返回了无效 JSON: {error}"))?;
+      let event_type = resolve_openresponses_stream_event_type(&payload, event_type_hint.as_deref());
 
-    let stderr_handle = thread::spawn(move || -> Result<String, String> {
-      let mut reader = BufReader::new(stderr);
-      let mut output = String::new();
-      reader
-        .read_to_string(&mut output)
-        .map_err(|error| format!("读取 OpenClaw stderr 失败: {error}"))?;
-      Ok(output)
-    });
+      match event_type.as_str() {
+        "response.output_text.delta" => {
+          if let Some(delta) = payload.get("delta").and_then(Value::as_str) {
+            reply.push_str(delta);
+          }
+        },
+        "response.output_text.done" => {
+          if let Some(text) = payload.get("text").and_then(Value::as_str) {
+            reply = text.to_string();
+          }
+        },
+        "response.output_item.added" | "response.output_item.done" => {
+          if let Some(item) = payload.get("item") {
+            upsert_openresponses_output_item(&mut output_items, item);
+          }
+        },
+        "response.function_call_arguments.delta" => {
+          if let Some(delta) = payload.get("delta").and_then(Value::as_str) {
+            append_openresponses_function_call_arguments(&mut output_items, delta);
+          }
+        },
+        "response.completed" => {
+          if let Some(response_value) = payload.get("response") {
+            response_json = Some(response_value.clone());
+            reply = extract_openresponses_reply(response_value);
+          }
+        },
+        "response.failed" => {
+          let detail = payload
+            .get("error")
+            .and_then(|value| value.get("message"))
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(ToString::to_string)
+            .or_else(|| {
+              payload
+                .get("error")
+                .and_then(Value::as_object)
+                .map(|error| serde_json::to_string(error).unwrap_or_else(|_| "OpenClaw gateway responses 流执行失败".to_string()))
+            })
+            .unwrap_or_else(|| {
+              serde_json::to_string(&payload).unwrap_or_else(|_| "OpenClaw gateway responses 流执行失败".to_string())
+            });
+          set_active_chat_stream(active_chat_process.inner(), None)?;
+          return Err(detail);
+        },
+        _ => {},
+      }
 
-    let status = child
-      .wait()
-      .map_err(|error| format!("等待 OpenClaw 响应失败: {error}"))?;
-    let active_chat_process = app_clone.state::<ActiveChatProcessState>();
-    clear_active_chat_pid(active_chat_process.inner(), child_pid)?;
-    set_active_chat_stream(active_chat_process.inner(), None)?;
-    let raw_output = stdout_handle
-      .join()
-      .map_err(|_| "读取 OpenClaw stdout 线程已崩溃".to_string())??;
-    let stderr_output = stderr_handle
-      .join()
-      .map_err(|_| "读取 OpenClaw stderr 线程已崩溃".to_string())??;
-
-    if !status.success() {
-      let stdout = raw_output.trim().to_string();
-      let stderr = stderr_output.trim().to_string();
-      let detail = if !stderr.is_empty() {
-        stderr
-      } else if !stdout.is_empty() {
-        stdout
-      } else {
-        "OpenClaw 未返回错误信息".to_string()
-      };
-      return Err(detail);
+      let snapshot_output = build_openresponses_stream_snapshot(&reply, &output_items);
+      emit_chat_stream_event(
+        &app,
+        active_chat_process.inner(),
+        OpenClawChatStreamEvent {
+          session_id: session_id.clone(),
+          status: if output_items.is_empty() {
+            "Streaming assistant response".to_string()
+          } else {
+            "Streaming assistant response and tool trace".to_string()
+          },
+          reply: reply.clone(),
+          raw_output: snapshot_output,
+        },
+      )?;
     }
+  }
 
-    let raw_output = raw_output.trim().to_string();
-    let reply = sanitize_openclaw_output(&raw_output).trim().to_string();
+  set_active_chat_stream(active_chat_process.inner(), None)?;
+  set_active_chat_stop_requested(active_chat_process.inner(), false)?;
 
-    if reply.is_empty() {
-      return Err("OpenClaw 未返回可显示的文本回复".to_string());
-    }
+  let raw_output = response_json.unwrap_or_else(|| build_openresponses_stream_snapshot(&reply, &output_items));
 
-    Ok(OpenClawChatResponse { session_id, reply, raw_output })
+  Ok(OpenClawChatResponse {
+    session_id,
+    reply,
+    raw_output,
   })
-  .await
-  .map_err(|error| format!("聊天任务失败: {error}"))?
 }
 
 #[tauri::command]
@@ -2175,6 +2467,19 @@ fn stop_openclaw_message(active_chat_process: tauri::State<'_, ActiveChatProcess
   };
 
   let Some(pid) = current_pid else {
+    let has_stream = {
+      let guard = active_chat_process
+        .stream
+        .lock()
+        .map_err(|_| "无法锁定当前聊天流状态".to_string())?;
+      guard.is_some()
+    };
+
+    if has_stream {
+      set_active_chat_stop_requested(active_chat_process.inner(), true)?;
+      return Ok(true);
+    }
+
     return Ok(false);
   };
 
@@ -2195,7 +2500,18 @@ fn get_openclaw_active_stream(
     .lock()
     .map_err(|_| "无法锁定当前聊天流状态".to_string())?;
 
-  Ok(guard.clone())
+  let snapshot = guard.clone();
+
+  match serde_json::to_string(&snapshot) {
+    Ok(serialized) => {
+      println!("[get_openclaw_active_stream] {serialized}");
+    },
+    Err(error) => {
+      eprintln!("[get_openclaw_active_stream] 序列化失败: {error}");
+    },
+  }
+
+  Ok(snapshot)
 }
 
 #[tauri::command]
@@ -2305,20 +2621,11 @@ Write-Output ('__OPENCLAW_CMD__=' + $cmd.Source)
     SaveConfigPayload {
       enabled: true,
       display_name: "Bundled OpenClaw".to_string(),
-      base_url: "http://127.0.0.1:18789".to_string(),
-      health_path: "/".to_string(),
+      base_url: bundled_gateway_base_url(),
+      health_path: DEFAULT_OPENCLAW_HEALTH_PATH.to_string(),
       model: "anthropic/claude-opus-4-6".to_string(),
       command: command_path.to_string_lossy().to_string(),
-      args: vec![
-        "gateway".to_string(),
-        "run".to_string(),
-        "--allow-unconfigured".to_string(),
-        "--auth".to_string(),
-        "none".to_string(),
-        "--port".to_string(),
-        "18789".to_string(),
-        "--force".to_string(),
-      ],
+      args: build_gateway_run_args(BUNDLED_GATEWAY_PORT),
       working_directory: prefix.to_string_lossy().to_string(),
     },
   )?;
@@ -2626,6 +2933,7 @@ pub fn run() {
       launch_openclaw_runtime,
       ensure_openclaw_runtime,
       get_openclaw_dashboard_url,
+      open_openclaw_dashboard,
       get_openclaw_runtime_info,
       run_openclaw_self_check,
       get_openclaw_auth_config,

@@ -6,158 +6,225 @@
   margin: 16px 24px 0;
 }
 
-.contextGrid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
+.workspaceBar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 24px 12px;
+  border-bottom: 1px solid rgba(19, 30, 26, 0.06);
+  background: rgba(251, 250, 245, 0.84);
+  backdrop-filter: blur(18px);
+}
+
+.workspaceEyebrow {
+  color: #6f877b;
+  font-size: 12px;
+  font-family:
+    "SFMono-Regular", "JetBrains Mono", "IBM Plex Mono", "Fira Code", "Menlo", "Consolas", monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.workspaceTitle {
+  margin: 6px 0 0 !important;
+}
+
+.workspaceMeta {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.workspaceTag {
+  margin-inline-end: 0;
+  border-radius: 999px;
+  background: #e9efeb;
+  color: #3f5b4f;
 }
 
 .chatMessageList {
   flex: 1;
   overflow: auto;
-  padding: 18px 24px 24px;
+  padding: 20px 24px 24px;
+  background:
+    radial-gradient(circle at top left, rgba(15, 123, 108, 0.05), transparent 26%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.36) 0%, rgba(243, 241, 234, 0.54) 100%);
+}
+
+.conversationRail {
+  max-width: 980px;
+  margin: 0 auto;
   display: flex;
   flex-direction: column;
   gap: 16px;
-  background:
-    radial-gradient(circle at top left, rgba(15, 123, 108, 0.08), transparent 28%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.48) 0%, rgba(243, 241, 234, 0.7) 100%);
 }
 
 .welcomeCard {
-  border-radius: 24px;
-  background: rgba(255, 255, 255, 0.8);
-  border: 1px solid rgba(15, 123, 108, 0.08);
+  max-width: 620px;
+  padding: 2px 0 8px;
 }
 
-.chatRow {
+.welcomeEyebrow {
+  color: #6f877b;
+  font-size: 12px;
+  font-family:
+    "SFMono-Regular", "JetBrains Mono", "IBM Plex Mono", "Fira Code", "Menlo", "Consolas", monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.welcomeTitle {
+  margin: 0 !important;
+}
+
+.chatGroup {
   display: flex;
-  align-items: flex-end;
-  gap: 12px;
+  align-items: flex-start;
+  gap: 16px;
+  margin-inline: 4px 16px;
 }
 
-.userRow {
-  justify-content: flex-end;
+.userGroup {
+  flex-direction: row-reverse;
 }
 
 .chatAvatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  border: 1px solid rgba(24, 40, 34, 0.08);
+  background: rgba(246, 248, 247, 0.9);
+  color: #5a7268;
+  display: grid;
+  place-items: center;
   flex: 0 0 auto;
+  align-self: flex-end;
+  margin-bottom: 4px;
+  font-size: 16px;
 }
 
-.userRow .chatAvatar {
-  order: 2;
-  background: linear-gradient(135deg, #21443b 0%, #0f7b6c 100%);
+.userGroup .chatAvatar {
+  background: rgba(232, 243, 238, 0.94);
+  color: #23624f;
+  border-color: rgba(31, 92, 80, 0.1);
 }
 
-.userRow .chatBubble {
-  order: 1;
-  background: linear-gradient(135deg, #184b42 0%, #0f7b6c 100%);
-  color: #f6f4ed;
+.toolGroup .chatAvatar {
+  color: #5d6f80;
 }
 
-.assistantRow .chatAvatar {
-  background: linear-gradient(135deg, #d98a32 0%, #b4681b 100%);
+.chatGroupMessages {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1 1 auto;
+  max-width: min(900px, 72%);
+  align-items: flex-start;
 }
 
-.systemRow .chatAvatar {
-  background: #7f8a84;
+.userGroup .chatGroupMessages {
+  align-items: flex-end;
+}
+
+.chatGroupFooter {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.userGroup .chatGroupFooter {
+  justify-content: flex-end;
+}
+
+.chatSenderName {
+  color: #6b7e76;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.chatGroupTimestamp {
+  color: #93a198;
+  font-size: 11px;
+  font-family:
+    "SFMono-Regular", "JetBrains Mono", "IBM Plex Mono", "Fira Code", "Menlo", "Consolas", monospace;
 }
 
 .chatBubble {
-  max-width: min(82%, 780px);
-  padding: 14px 16px;
-  border-radius: 22px;
-  background: rgba(255, 255, 255, 0.92);
-  border: 1px solid rgba(28, 35, 31, 0.08);
-  box-shadow: 0 14px 30px rgba(31, 43, 38, 0.08);
-}
-
-.chatBubbleLoading {
-  background: rgba(255, 255, 255, 0.78);
-}
-
-.chatBubbleStreaming {
-  background: rgba(255, 255, 255, 0.94);
-}
-
-.traceCard {
-  margin-left: 52px;
-  max-width: min(82%, 780px);
-  border-radius: 20px;
-  background: rgba(250, 248, 242, 0.92);
-  border: 1px solid rgba(15, 123, 108, 0.12);
-}
-
-.chatMeta {
-  margin-bottom: 6px;
-}
-
-.chatContent {
-  margin-bottom: 0;
-  white-space: pre-wrap;
-}
-
-.streamingCursor {
-  display: inline-block;
-  width: 0.6em;
-  height: 1.1em;
-  margin-left: 2px;
-  vertical-align: -0.2em;
-  border-radius: 999px;
-  background: rgba(15, 123, 108, 0.7);
-  animation: pulse-cursor 1s ease-in-out infinite;
-}
-
-.traceContent {
-  margin: 0;
+  width: auto;
+  max-width: 100%;
   padding: 12px 14px;
-  border-radius: 14px;
-  background: rgba(22, 30, 27, 0.92);
-  color: #dce7df;
-  font-size: 12px;
-  line-height: 1.5;
-  white-space: pre-wrap;
-  word-break: break-word;
-  max-height: 240px;
-  overflow: auto;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(28, 35, 31, 0.06);
+  box-shadow: 0 10px 24px rgba(23, 34, 29, 0.04);
+  color: #17322b;
 }
 
-@keyframes pulse-cursor {
-  0%,
-  100% {
-    opacity: 0.2;
-  }
+.userGroup .chatBubble {
+  background: linear-gradient(180deg, #eff7f3 0%, #e8f1ed 100%);
+  border-color: rgba(31, 92, 80, 0.08);
+}
 
-  50% {
-    opacity: 1;
-  }
+.assistantGroup .chatBubble {
+  background: rgba(255, 255, 255, 0.86);
+}
+
+.toolGroup .chatBubble {
+  background: rgba(246, 247, 248, 0.95);
+  border-color: rgba(59, 78, 95, 0.08);
+}
+
+.systemGroup .chatBubble {
+  background: rgba(244, 244, 241, 0.9);
+  color: #45514c;
+}
+
+.streamingBubble {
+  position: relative;
+  overflow: hidden;
+}
+
+.streamingBubble::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(25, 112, 93, 0.05), transparent 36%);
+  pointer-events: none;
 }
 
 .chatAlert {
-  margin: 0 0 18px;
-}
-
-@media (max-width: 992px) {
-  .contextGrid {
-    grid-template-columns: 1fr 1fr;
-  }
+  margin: 0 24px 18px;
 }
 
 @media (max-width: 768px) {
-  .contextShell {
-    padding: 16px 16px 0;
-  }
-
-  .contextGrid {
-    grid-template-columns: 1fr;
+  .workspaceBar {
+    padding: 16px 16px 10px;
+    flex-direction: column;
   }
 
   .chatMessageList {
     padding: 16px;
   }
 
-  .traceCard {
-    margin-left: 0;
+  .chatGroup {
+    gap: 10px;
+    margin-right: 0;
+  }
+
+  .chatAvatar {
+    width: 32px;
+    height: 32px;
+  }
+
+  .chatGroupMessages {
     max-width: 100%;
+  }
+
+  .chatAlert {
+    margin: 0 16px 16px;
   }
 }

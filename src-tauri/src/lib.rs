@@ -71,8 +71,6 @@ fn build_gateway_run_args(port: u16) -> Vec<String> {
     "gateway".to_string(),
     "run".to_string(),
     "--allow-unconfigured".to_string(),
-    "--auth".to_string(),
-    "none".to_string(),
     "--port".to_string(),
     port.to_string(),
     "--force".to_string(),
@@ -111,6 +109,28 @@ fn replace_gateway_port_arg(args: &[String], port: u16) -> Vec<String> {
   if !replaced {
     next_args.push("--port".to_string());
     next_args.push(port.to_string());
+  }
+
+  next_args
+}
+
+fn remove_gateway_auth_override(args: &[String]) -> Vec<String> {
+  if args.is_empty() {
+    return Vec::new();
+  }
+
+  let mut next_args = Vec::with_capacity(args.len());
+  let mut index = 0;
+
+  while index < args.len() {
+    let current = &args[index];
+    if current == "--auth" {
+      index += if index + 1 < args.len() { 2 } else { 1 };
+      continue;
+    }
+
+    next_args.push(current.clone());
+    index += 1;
   }
 
   next_args
@@ -970,16 +990,20 @@ async fn probe_status(app: &AppHandle, config: &OpenClawConfig) -> OpenClawStatu
     None
   };
 
-  let probe_endpoint = |endpoint: String| async move {
+  let bearer_token = read_gateway_bearer_token(app, config).ok().flatten();
+
+  let probe_endpoint = |endpoint: String, bearer_token: Option<String>| async move {
     let client = reqwest::Client::new();
     let mut last_error = None;
 
     for attempt in 0..OPENCLAW_HEALTH_PROBE_ATTEMPTS {
-      let response = client
+      let mut request = client
         .get(&endpoint)
-        .timeout(Duration::from_secs(OPENCLAW_HEALTH_PROBE_TIMEOUT_SECS))
-        .send()
-        .await;
+        .timeout(Duration::from_secs(OPENCLAW_HEALTH_PROBE_TIMEOUT_SECS));
+      if let Some(token) = bearer_token.as_deref() {
+        request = request.bearer_auth(token);
+      }
+      let response = request.send().await;
 
       match response {
         Ok(response) => {
@@ -987,6 +1011,8 @@ async fn probe_status(app: &AppHandle, config: &OpenClawConfig) -> OpenClawStatu
           let ok = status.is_success() || status == StatusCode::NOT_FOUND;
           let message = if ok {
             format!("OpenClaw runtime 已响应 {}", status.as_u16())
+          } else if status == StatusCode::UNAUTHORIZED || status == StatusCode::FORBIDDEN {
+            format!("OpenClaw runtime 已响应，但当前健康检查认证失败（HTTP {}）", status.as_u16())
           } else {
             format!("OpenClaw runtime 返回状态 {}", status.as_u16())
           };
@@ -1005,12 +1031,14 @@ async fn probe_status(app: &AppHandle, config: &OpenClawConfig) -> OpenClawStatu
     (false, None, format!("无法连接到 OpenClaw runtime: {detail}"))
   };
 
-  let (mut reachable, mut http_status, mut message) = probe_endpoint(configured_endpoint.clone()).await;
+  let (mut reachable, mut http_status, mut message) =
+    probe_endpoint(configured_endpoint.clone(), bearer_token.clone()).await;
   let mut endpoint = configured_endpoint.clone();
 
   if !reachable {
     if let Some(fallback_endpoint) = fallback_endpoint {
-      let (fallback_reachable, fallback_http_status, fallback_message) = probe_endpoint(fallback_endpoint.clone()).await;
+      let (fallback_reachable, fallback_http_status, fallback_message) =
+        probe_endpoint(fallback_endpoint.clone(), bearer_token).await;
       if fallback_reachable {
         reachable = true;
         http_status = fallback_http_status;
@@ -1072,11 +1100,15 @@ fn migrate_bundled_gateway_config(config: &mut OpenClawConfig) -> bool {
   let uses_legacy_port_arg = has_gateway_port_arg(&config.args, LEGACY_BUNDLED_GATEWAY_PORT)
     || has_gateway_port_arg(&config.args, OLDER_BUNDLED_GATEWAY_PORT);
   let should_upgrade_health_path = should_migrate_bundled_health_path(&config.health_path);
+  let normalized_args = remove_gateway_auth_override(&config.args);
   let mut changed = false;
 
   if uses_legacy_base_url || uses_legacy_port_arg {
     config.base_url = bundled_gateway_base_url();
-    config.args = replace_gateway_port_arg(&config.args, BUNDLED_GATEWAY_PORT);
+    config.args = replace_gateway_port_arg(&normalized_args, BUNDLED_GATEWAY_PORT);
+    changed = true;
+  } else if normalized_args != config.args {
+    config.args = normalized_args;
     changed = true;
   }
 
@@ -2116,6 +2148,10 @@ async fn launch_openclaw_runtime(app: AppHandle) -> Result<OpenClawStatus, Strin
   }
 
   let mut status = wait_for_runtime_ready(&app, &config, Duration::from_secs(OPENCLAW_RUNTIME_READY_TIMEOUT_SECS)).await;
+  if !status.reachable && gateway_detected && executable_exists(&config.command) {
+    spawn_runtime_process(&config)?;
+    status = wait_for_runtime_ready(&app, &config, Duration::from_secs(OPENCLAW_RUNTIME_READY_TIMEOUT_SECS)).await;
+  }
   status.message = if status.reachable {
     if gateway_detected {
       "检测到 OpenClaw runtime 正在启动，现已连接".to_string()
@@ -2202,6 +2238,16 @@ async fn ensure_openclaw_runtime(app: AppHandle) -> Result<OpenClawStatus, Strin
   }
 
   let mut status = wait_for_runtime_ready(&app, &config, Duration::from_secs(OPENCLAW_RUNTIME_READY_TIMEOUT_SECS)).await;
+  if !status.reachable && gateway_detected {
+    let config_clone = config.clone();
+    tauri::async_runtime::spawn_blocking(move || -> Result<(), String> {
+      spawn_runtime_process(&config_clone)?;
+      Ok(())
+    })
+    .await
+    .map_err(|error| format!("补偿启动任务失败: {error}"))??;
+    status = wait_for_runtime_ready(&app, &config, Duration::from_secs(OPENCLAW_RUNTIME_READY_TIMEOUT_SECS)).await;
+  }
   if status.reachable {
     status.message = if gateway_detected {
       "检测到 OpenClaw runtime 正在启动，现已连接".to_string()
@@ -2245,6 +2291,16 @@ async fn send_openclaw_message(
     }
 
     status = wait_for_runtime_ready(&app, &config, Duration::from_secs(OPENCLAW_RUNTIME_READY_TIMEOUT_SECS)).await;
+    if !status.reachable && configured_gateway_detected(&config) {
+      let config_clone = config.clone();
+      tauri::async_runtime::spawn_blocking(move || -> Result<(), String> {
+        spawn_runtime_process(&config_clone)?;
+        Ok(())
+      })
+      .await
+      .map_err(|error| format!("补偿启动聊天 runtime 失败: {error}"))??;
+      status = wait_for_runtime_ready(&app, &config, Duration::from_secs(OPENCLAW_RUNTIME_READY_TIMEOUT_SECS)).await;
+    }
   }
 
   if !status.reachable {

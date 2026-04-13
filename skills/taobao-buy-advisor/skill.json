@@ -1,9 +1,0 @@
-{
-  "id": "taobao-buy-advisor",
-  "name": "淘宝商品购买建议",
-  "category": "买家决策",
-  "summary": "根据淘宝商品详情、评论和问答，判断商品是否值得购买，并总结优缺点与风险。",
-  "author": "Codex",
-  "version": "0.1.0",
-  "entry": "SKILL.md"
-}

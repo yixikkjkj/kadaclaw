@@ -1,9 +1,0 @@
-{
-  "id": "taobao-feedback-monitor",
-  "name": "淘宝商品评论监控",
-  "category": "店铺监控",
-  "summary": "导入淘宝商品评论和问答，识别负面反馈与未回复问题，并生成告警和日报。",
-  "author": "Codex",
-  "version": "0.1.0",
-  "entry": "SKILL.md"
-}

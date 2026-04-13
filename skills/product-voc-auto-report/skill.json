@@ -1,9 +1,0 @@
-{
-  "id": "product-voc-auto-report",
-  "name": "商品消费者原声自动分析",
-  "category": "商品分析",
-  "summary": "通过已登录商家后台浏览器自动采集评价、问答、售后投诉，并输出本地商品优化报告。",
-  "author": "Codex",
-  "version": "0.1.0",
-  "entry": "SKILL.md"
-}

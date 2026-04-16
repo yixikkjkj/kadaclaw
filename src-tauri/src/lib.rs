@@ -20,6 +20,8 @@ const DEFAULT_OPENCLAW_HEALTH_PATH: &str = "/v1/models";
 const OPENCLAW_HEALTH_PROBE_TIMEOUT_SECS: u64 = 5;
 const OPENCLAW_HEALTH_PROBE_ATTEMPTS: usize = 2;
 const OPENCLAW_RUNTIME_READY_TIMEOUT_SECS: u64 = 90;
+const MINIMAX_PROVIDER_KEY: &str = "minimax-portal";
+const MINIMAX_BASE_URL: &str = "https://api.minimaxi.com/v1";
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -1412,18 +1414,55 @@ fn provider_env_name(provider: &str) -> Option<&'static str> {
     "custom" => Some("OPENAI_API_KEY"),
     "openrouter" => Some("OPENROUTER_API_KEY"),
     "deepseek" => Some("DEEPSEEK_API_KEY"),
+    "minimax" => Some("MINIMAX_API_KEY"),
     "google" => Some("GEMINI_API_KEY"),
     _ => None,
   }
 }
 
 fn provider_from_model(model: &str) -> String {
-  model
+  match model
     .split('/')
     .next()
     .filter(|value| !value.trim().is_empty())
     .unwrap_or("anthropic")
-    .to_string()
+  {
+    MINIMAX_PROVIDER_KEY => "minimax".to_string(),
+    value => value.to_string(),
+  }
+}
+
+fn read_minimax_provider_api_key(root: &Value) -> Option<String> {
+  root
+    .get("models")
+    .and_then(|value| value.get("providers"))
+    .and_then(|value| value.get(MINIMAX_PROVIDER_KEY))
+    .and_then(|value| value.get("apiKey"))
+    .and_then(Value::as_str)
+    .map(str::trim)
+    .filter(|value| !value.is_empty())
+    .map(ToString::to_string)
+}
+
+fn build_minimax_model_entry(model: &str) -> Value {
+  let model_id = model
+    .split_once('/')
+    .map(|(_, value)| value)
+    .filter(|value| !value.trim().is_empty())
+    .unwrap_or(model)
+    .trim()
+    .to_string();
+  let model_name = model_id.replacen("MiniMax-", "MiniMax ", 1);
+
+  json!({
+    "contextWindow": 200000,
+    "cost": {
+      "input": 0.001,
+      "output": 0.004,
+    },
+    "id": model_id,
+    "name": model_name,
+  })
 }
 
 fn read_openclaw_auth_config(app: &AppHandle) -> Result<OpenClawAuthConfig, String> {
@@ -1458,7 +1497,8 @@ fn read_openclaw_auth_config(app: &AppHandle) -> Result<OpenClawAuthConfig, Stri
     .and_then(|value| value.get(&api_key_env_name))
     .and_then(Value::as_str)
     .map(|value| !value.trim().is_empty())
-    .unwrap_or(false);
+    .unwrap_or(false)
+    || (provider == "minimax" && read_minimax_provider_api_key(&root).is_some());
 
   Ok(OpenClawAuthConfig {
     provider,
@@ -1487,30 +1527,110 @@ fn save_openclaw_auth_config_impl(
   let api_key_env_name = provider_env_name(&provider)
     .ok_or_else(|| "暂不支持该 Provider".to_string())?
     .to_string();
+  let existing_minimax_api_key = if provider == "minimax" {
+    read_minimax_provider_api_key(&root)
+  } else {
+    None
+  };
 
   let root_obj = root.as_object_mut().ok_or_else(|| "配置文件对象无效".to_string())?;
 
-  let env_value = root_obj.entry("env".to_string()).or_insert_with(|| json!({}));
-  if !env_value.is_object() {
-    *env_value = json!({});
-  }
-  let env_obj = env_value.as_object_mut().ok_or_else(|| "env 配置无效".to_string())?;
-
   let api_key = payload.api_key.trim().to_string();
-  if !api_key.is_empty() {
-    env_obj.insert(api_key_env_name.clone(), Value::String(api_key));
-  }
   let api_base_url = payload
     .api_base_url
     .as_deref()
     .map(str::trim)
     .filter(|value| !value.is_empty())
     .map(ToString::to_string);
-  if provider == "custom" {
-    let base_url = api_base_url.ok_or_else(|| "Custom Provider 的 API Base URL 不能为空".to_string())?;
-    env_obj.insert("OPENAI_BASE_URL".to_string(), Value::String(base_url));
-  } else {
-    env_obj.remove("OPENAI_BASE_URL");
+  let saved_env_api_key = {
+    let env_value = root_obj.entry("env".to_string()).or_insert_with(|| json!({}));
+    if !env_value.is_object() {
+      *env_value = json!({});
+    }
+    let env_obj = env_value.as_object_mut().ok_or_else(|| "env 配置无效".to_string())?;
+
+    if !api_key.is_empty() {
+      env_obj.insert(api_key_env_name.clone(), Value::String(api_key.clone()));
+    }
+    if provider == "custom" {
+      let base_url = api_base_url
+        .clone()
+        .ok_or_else(|| "Custom Provider 的 API Base URL 不能为空".to_string())?;
+      env_obj.insert("OPENAI_BASE_URL".to_string(), Value::String(base_url));
+    } else {
+      env_obj.remove("OPENAI_BASE_URL");
+    }
+
+    env_obj
+      .get(&api_key_env_name)
+      .and_then(Value::as_str)
+      .map(str::trim)
+      .filter(|value| !value.is_empty())
+      .map(ToString::to_string)
+  };
+
+  if provider == "minimax" {
+    let models_value = root_obj.entry("models".to_string()).or_insert_with(|| json!({}));
+    if !models_value.is_object() {
+      *models_value = json!({});
+    }
+    let models_obj = models_value
+      .as_object_mut()
+      .ok_or_else(|| "models 配置无效".to_string())?;
+    let providers_value = models_obj.entry("providers".to_string()).or_insert_with(|| json!({}));
+    if !providers_value.is_object() {
+      *providers_value = json!({});
+    }
+    let providers_obj = providers_value
+      .as_object_mut()
+      .ok_or_else(|| "models.providers 配置无效".to_string())?;
+    let minimax_value = providers_obj
+      .entry(MINIMAX_PROVIDER_KEY.to_string())
+      .or_insert_with(|| json!({}));
+    if !minimax_value.is_object() {
+      *minimax_value = json!({});
+    }
+    let minimax_obj = minimax_value
+      .as_object_mut()
+      .ok_or_else(|| "MiniMax Provider 配置无效".to_string())?;
+    minimax_obj.insert("api".to_string(), Value::String("openai-completions".to_string()));
+    minimax_obj.insert("baseUrl".to_string(), Value::String(MINIMAX_BASE_URL.to_string()));
+    if !api_key.is_empty() {
+      minimax_obj.insert("apiKey".to_string(), Value::String(api_key.clone()));
+    } else if let Some(saved_api_key) = existing_minimax_api_key.clone() {
+      minimax_obj.insert("apiKey".to_string(), Value::String(saved_api_key));
+    } else if let Some(saved_api_key) = saved_env_api_key.clone() {
+      minimax_obj.insert("apiKey".to_string(), Value::String(saved_api_key));
+    }
+    minimax_obj.insert(
+      "models".to_string(),
+      Value::Array(vec![build_minimax_model_entry(&model)]),
+    );
+
+    let plugins_value = root_obj.entry("plugins".to_string()).or_insert_with(|| json!({}));
+    if !plugins_value.is_object() {
+      *plugins_value = json!({});
+    }
+    let plugins_obj = plugins_value
+      .as_object_mut()
+      .ok_or_else(|| "plugins 配置无效".to_string())?;
+    let entries_value = plugins_obj.entry("entries".to_string()).or_insert_with(|| json!({}));
+    if !entries_value.is_object() {
+      *entries_value = json!({});
+    }
+    let entries_obj = entries_value
+      .as_object_mut()
+      .ok_or_else(|| "plugins.entries 配置无效".to_string())?;
+    let minimax_plugin_value = entries_obj
+      .entry("minimax".to_string())
+      .or_insert_with(|| json!({}));
+    if !minimax_plugin_value.is_object() {
+      *minimax_plugin_value = json!({});
+    }
+    let minimax_plugin_obj = minimax_plugin_value
+      .as_object_mut()
+      .ok_or_else(|| "MiniMax 插件配置无效".to_string())?;
+    minimax_plugin_obj.insert("enabled".to_string(), Value::Bool(true));
   }
 
   let agents_value = root_obj.entry("agents".to_string()).or_insert_with(|| json!({}));

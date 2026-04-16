@@ -1,0 +1,9 @@
+{
+  "id": "multi-platform-product-review-analysis",
+  "name": "多平台商品评论分析",
+  "category": "电商分析",
+  "summary": "输入抖音、拼多多、淘宝、天猫或京东商品链接，使用默认 CDP 浏览器采集当前商品的信息、评论与问答，并导出本地 Excel 报告。",
+  "author": "Codex",
+  "version": "0.1.0",
+  "entry": "SKILL.md"
+}

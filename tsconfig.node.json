@@ -5,5 +5,5 @@
     "moduleResolution": "Node",
     "allowSyntheticDefaultImports": true
   },
-  "include": []
+  "files": ["./tsconfig.node-placeholder.d.ts"]
 }

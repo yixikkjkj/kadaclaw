@@ -46,6 +46,12 @@ export const OPENCLAW_PROVIDER_OPTIONS: OpenClawProviderOption[] = [
     model: "deepseek/deepseek-chat",
   },
   {
+    label: "MiniMax",
+    value: "minimax",
+    env: "MINIMAX_API_KEY",
+    model: "minimax-portal/MiniMax-M2.7",
+  },
+  {
     label: "Google",
     value: "google",
     env: "GEMINI_API_KEY",

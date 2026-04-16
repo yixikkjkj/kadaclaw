@@ -97,5 +97,5 @@ export const buildDefaultOutputPath = (platform, directory = "~/Downloads") => {
   const baseDirectory = directory.startsWith("~/")
     ? path.join(process.env.HOME ?? "", directory.slice(2))
     : directory;
-  return path.join(baseDirectory, `${platform}-product-benchmark-${timestamp}.xlsx`);
+  return path.join(baseDirectory, `${platform}-product-review-analysis-${timestamp}.xlsx`);
 };

@@ -100,7 +100,7 @@ export const writeWorkbook = (outputPath, sheets) => {
   ${contentOverrides.join("")}
 </Types>`;
 
-  const tempDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "product-benchmark-xlsx-"));
+  const tempDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "product-review-analysis-xlsx-"));
 
   try {
     fs.writeFileSync(path.join(tempDirectory, "[Content_Types].xml"), contentTypesXml, "utf8");

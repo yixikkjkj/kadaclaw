@@ -7,6 +7,7 @@
     "dev": "rspack serve --host 127.0.0.1 --port 1420",
     "build": "tsc && rspack build",
     "preview": "rspack serve --mode production --host 127.0.0.1 --port 1420",
+    "postinstall": "node scripts/patch_typescript_plugin_css_modules.mjs",
     "lint": "oxlint .",
     "format": "oxfmt --write .",
     "format:check": "oxfmt --check .",
@@ -43,6 +44,7 @@
     "oxlint": "^1.57.0",
     "ts-loader": "^9.5.2",
     "typescript": "^5.8.2",
+    "typescript-plugin-css-modules": "^5.2.0",
     "webpack-dev-server": "^5.2.0"
   },
   "packageManager": "yarn@1.22.19"

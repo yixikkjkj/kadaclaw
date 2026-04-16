@@ -1,6 +1,5 @@
 import {
   AppstoreOutlined,
-  CloudDownloadOutlined,
   DeleteOutlined,
   MenuUnfoldOutlined,
   MessageOutlined,
@@ -153,8 +152,7 @@ export const Sidebar = () => {
       : []),
   ];
   const bottomMenuItems: NonNullable<MenuProps["items"]> = [
-    { key: ROUTE_PATHS.skills, icon: <AppstoreOutlined />, label: "场景中心" },
-    { key: ROUTE_PATHS.installed, icon: <CloudDownloadOutlined />, label: "已启用" },
+    { key: ROUTE_PATHS.skills, icon: <AppstoreOutlined />, label: "技能中心" },
     { key: ROUTE_PATHS.settings, icon: <SettingOutlined />, label: "设置" },
   ];
   const selectedKey =

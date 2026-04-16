@@ -8,6 +8,7 @@ import {
   type RecognizedSkillRecord,
 } from "~/api";
 import { ROUTE_PATHS } from "~/common/constants";
+import { InstalledSkillsSection } from "~/components";
 import { useSkillStore } from "~/store";
 import styles from "./index.css";
 
@@ -110,6 +111,8 @@ export function SkillsPage() {
         </Col>
       </Row>
 
+      <InstalledSkillsSection />
+
       <Card title="安装技能">
         <Flex vertical gap={16}>
           <div className={styles.installGrid}>
@@ -179,9 +182,6 @@ export function SkillsPage() {
                 actions={[
                   <Button key="view" type="link" onClick={() => openSkill(skill.name)}>
                     详情
-                  </Button>,
-                  <Button key="chat" type="link" onClick={() => navigate(ROUTE_PATHS.chat)}>
-                    去对话
                   </Button>,
                 ]}
               >

@@ -7,3 +7,4 @@ dist/
 scripts/__pycache__/
 src-tauri/target/
 my/
+.vscode/

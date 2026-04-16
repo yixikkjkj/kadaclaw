@@ -2,6 +2,7 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
+  min-width: 0;
 }
 
 .bubbleActions {
@@ -45,6 +46,9 @@
 .textBlock {
   color: inherit;
   line-height: 1.68;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 
   & p {
     margin: 0;
@@ -77,6 +81,9 @@
     color: #f2f7f4;
     font-size: 12px;
     line-height: 1.6;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    word-break: break-word;
   }
 
   & code {
@@ -91,12 +98,17 @@
     border-radius: 7px;
     background: rgba(31, 50, 43, 0.08);
     color: #204238;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    word-break: break-word;
   }
 
   & a {
     color: #175b4e;
     text-decoration: underline;
     text-underline-offset: 0.14em;
+    overflow-wrap: anywhere;
+    word-break: break-word;
   }
 
   & blockquote {

@@ -1,5 +1,5 @@
 import { RobotOutlined, ToolOutlined, UserOutlined } from "@ant-design/icons";
-import { Alert, Button, Flex, Tag, Typography } from "antd";
+import { Alert, Button, Flex, Typography } from "antd";
 import classNames from "classnames";
 import dayjs from "dayjs";
 import { useEffect, useRef } from "react";
@@ -11,7 +11,11 @@ import {
 } from "~/common/chatMessage";
 import { ROUTE_PATHS } from "~/common/constants";
 import { ChatComposer, ChatMessageContent } from "~/components";
-import { selectActiveChatSession, useChatStore, useRuntimeStore, useSkillStore } from "~/store";
+import {
+  selectActiveChatSession,
+  useChatStore,
+  useRuntimeStore,
+} from "~/store";
 import styles from "./index.css";
 
 const { Paragraph, Text, Title } = Typography;
@@ -109,8 +113,6 @@ export const ChatPage = () => {
   const streamingStatus = useChatStore((state) => state.streamingStatus);
   const streamingReply = useChatStore((state) => state.streamingReply);
   const streamingRawOutput = useChatStore((state) => state.streamingRawOutput);
-  const installedSkills = useSkillStore((state) => state.installedSkills);
-  const readySkillIds = useSkillStore((state) => state.readySkillIds);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -120,7 +122,13 @@ export const ChatPage = () => {
     }
 
     container.scrollTop = container.scrollHeight;
-  }, [activeChatSession, chatError, streamingRawOutput, streamingRunning, streamingStatus]);
+  }, [
+    activeChatSession,
+    chatError,
+    streamingRawOutput,
+    streamingRunning,
+    streamingStatus,
+  ]);
 
   useEffect(() => {
     void refreshAuthConfig();
@@ -128,8 +136,8 @@ export const ChatPage = () => {
 
   const executionStatus = normalizeStreamingStatus(streamingStatus);
   const activeSessionTitle = activeChatSession?.title || "New Chat";
-  const normalizedMessages = (activeChatSession?.messages ?? []).map((message) =>
-    normalizeChatMessage(message),
+  const normalizedMessages = (activeChatSession?.messages ?? []).map(
+    (message) => normalizeChatMessage(message),
   );
   const messageGroups = buildMessageGroups(normalizedMessages);
   const streamingPreviewMessage =
@@ -142,6 +150,8 @@ export const ChatPage = () => {
           createdAt: new Date().toISOString(),
         })
       : null;
+  const shouldShowWelcomeCard =
+    messageGroups.length === 0 && streamingPreviewMessage === null;
 
   return (
     <Flex vertical className={styles.chatPanel}>
@@ -153,46 +163,35 @@ export const ChatPage = () => {
           title="当前模型授权尚未配置"
           description={`当前使用 ${authConfig.model}，需要前往设置页补充 ${authConfig.apiKeyEnvName}。`}
           action={
-            <Button size="small" onClick={() => void navigate(ROUTE_PATHS.settings)}>
+            <Button
+              size="small"
+              onClick={() => void navigate(ROUTE_PATHS.settings)}
+            >
               去设置
             </Button>
           }
         />
       ) : null}
 
-      <div className={styles.workspaceBar}>
-        <div>
-          <Text className={styles.workspaceEyebrow}>Workspace</Text>
-          <Title level={4} className={styles.workspaceTitle}>
-            {activeSessionTitle}
-          </Title>
-        </div>
-        <div className={styles.workspaceMeta}>
-          <Tag bordered={false} className={styles.workspaceTag}>
-            Runtime · {runtimeStatus}
-          </Tag>
-          <Tag bordered={false} className={styles.workspaceTag}>
-            Model · {authConfig?.model ?? "未配置"}
-          </Tag>
-          <Tag bordered={false} className={styles.workspaceTag}>
-            Skills · {readySkillIds.length}/{installedSkills.length}
-          </Tag>
-        </div>
-      </div>
+      <Title level={4} className={styles.workspaceTitle}>
+        {activeSessionTitle}
+      </Title>
 
       <div className={styles.chatMessageList} ref={scrollRef}>
         <div className={styles.conversationRail}>
-          <div className={styles.welcomeCard}>
-            <Flex vertical gap={10}>
-              <Text className={styles.welcomeEyebrow}>New Chat</Text>
-              <Title level={5} className={styles.welcomeTitle}>
-                描述目标，直接开始
-              </Title>
-              <Paragraph type="secondary" style={{ marginBottom: 0 }}>
-                直接描述目标、问题或希望调用的技能，系统会按你的输入继续执行。
-              </Paragraph>
-            </Flex>
-          </div>
+          {shouldShowWelcomeCard ? (
+            <div className={styles.welcomeCard}>
+              <Flex vertical gap={10}>
+                <Text className={styles.welcomeEyebrow}>New Chat</Text>
+                <Title level={5} className={styles.welcomeTitle}>
+                  描述目标，直接开始
+                </Title>
+                <Paragraph type="secondary" style={{ marginBottom: 0 }}>
+                  直接描述目标、问题或希望调用的技能，系统会按你的输入继续执行。
+                </Paragraph>
+              </Flex>
+            </div>
+          ) : null}
 
           {messageGroups.map((group) => (
             <div
@@ -208,7 +207,9 @@ export const ChatPage = () => {
                       : styles.systemGroup,
               )}
             >
-              <div className={styles.chatAvatar}>{renderGroupAvatar(group.role)}</div>
+              <div className={styles.chatAvatar}>
+                {renderGroupAvatar(group.role)}
+              </div>
 
               <div className={styles.chatGroupMessages}>
                 {group.messages.map((message) => (
@@ -218,9 +219,13 @@ export const ChatPage = () => {
                 ))}
 
                 <div className={styles.chatGroupFooter}>
-                  <Text className={styles.chatSenderName}>{getGroupLabel(group.role)}</Text>
+                  <Text className={styles.chatSenderName}>
+                    {getGroupLabel(group.role)}
+                  </Text>
                   <Text className={styles.chatGroupTimestamp}>
-                    {formatMessageTime(group.messages[group.messages.length - 1].createdAt)}
+                    {formatMessageTime(
+                      group.messages[group.messages.length - 1].createdAt,
+                    )}
                   </Text>
                 </div>
               </div>
@@ -240,7 +245,12 @@ export const ChatPage = () => {
                 {renderGroupAvatar(streamingPreviewMessage.displayRole)}
               </div>
               <div className={styles.chatGroupMessages}>
-                <div className={classNames(styles.chatBubble, styles.streamingBubble)}>
+                <div
+                  className={classNames(
+                    styles.chatBubble,
+                    styles.streamingBubble,
+                  )}
+                >
                   <ChatMessageContent
                     message={streamingPreviewMessage}
                     streaming

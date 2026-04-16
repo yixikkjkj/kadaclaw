@@ -4,7 +4,6 @@ import { RouteStatusCard } from "~/components";
 import { getErrorMessage } from "~/common/utils";
 import { MainLayout } from "~/layouts/MainLayout";
 import { ChatPage } from "~/pages/Chat";
-import { InstalledPage } from "~/pages/Installed";
 import { SettingsPage } from "~/pages/Settings";
 import { SkillsPage } from "~/pages/Skills";
 
@@ -42,7 +41,7 @@ export const router = createHashRouter([
           },
           {
             path: ROUTE_PATHS.installed.slice(1),
-            element: <InstalledPage />,
+            element: <Navigate to={ROUTE_PATHS.skills} replace />,
           },
           {
             path: ROUTE_PATHS.settings.slice(1),

@@ -2,9 +2,7 @@
 .senderDock {
   margin: 0 24px 18px;
   padding: 14px;
-  border-top: 1px solid rgba(19, 30, 26, 0.08);
-  background: rgba(248, 247, 242, 0.88);
-  backdrop-filter: blur(18px);
+  background: transparent;
 }
 
 .senderMetaBar {
@@ -48,33 +46,9 @@
   color: #1f5c50;
 }
 
-.senderHint {
-  color: #77857f;
-}
-
 .sender {
   max-width: 980px;
   margin: 0 auto;
-}
-
-.header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.headerLabel {
-  min-width: 76px;
-}
-
-.headerControls {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex: 1;
-  flex-wrap: wrap;
 }
 
 .control {

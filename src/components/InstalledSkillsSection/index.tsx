@@ -8,12 +8,10 @@ import {
   Flex,
   List,
   Row,
-  Statistic,
   Tag,
   Typography,
 } from "antd";
 import { useMemo } from "react";
-import { type RecognizedSkillRecord } from "~/api";
 import { useSkillStore } from "~/store";
 import styles from "./index.css";
 
@@ -33,10 +31,9 @@ interface InstalledSkillListItem {
   removable: boolean;
   recognized: boolean;
   eligible: boolean;
-  description?: string;
 }
 
-export function InstalledPage() {
+export function InstalledSkillsSection() {
   const openSkill = useSkillStore((state) => state.openSkill);
   const installedSkills = useSkillStore((state) => state.installedSkills);
   const recognizedSkills = useSkillStore((state) => state.recognizedSkills);
@@ -67,7 +64,6 @@ export function InstalledPage() {
         removable: false,
         recognized: true,
         eligible: record.eligible,
-        description: record.description,
       }));
 
     return [...installedItems, ...recognizedOnlyItems].sort((left, right) =>
@@ -77,24 +73,6 @@ export function InstalledPage() {
 
   return (
     <Flex vertical gap={20}>
-      <Row gutter={[16, 16]}>
-        <Col xs={24} md={8}>
-          <Card>
-            <Statistic title="已启用能力" value={mergedSkills.length} suffix="个" />
-          </Card>
-        </Col>
-        <Col xs={24} md={8}>
-          <Card>
-            <Statistic title="本地安装" value={installedSkills.length} suffix="个" />
-          </Card>
-        </Col>
-        <Col xs={24} md={8}>
-          <Card>
-            <Statistic title="可直接调用" value={readySkillIds.length} suffix="个" />
-          </Card>
-        </Col>
-      </Row>
-
       <Card title="已启用技能">
         {skillOperationError ? (
           <Alert type="error" showIcon message={skillOperationError} style={{ marginBottom: 16 }} />
@@ -198,34 +176,6 @@ export function InstalledPage() {
           ))}
         </Row>
       </Card>
-
-      {recognizedSkills.some((record) => !installedSkills.some((skill) => skill.id === record.name)) ? (
-        <Card title="仅由 Runtime 识别的技能">
-          <List<RecognizedSkillRecord>
-            dataSource={recognizedSkills.filter((record) => !installedSkills.some((skill) => skill.id === record.name))}
-            renderItem={(skill) => (
-              <List.Item
-                actions={[
-                  <Button key="view" type="link" onClick={() => openSkill(skill.name)}>
-                    详情
-                  </Button>,
-                ]}
-              >
-                <List.Item.Meta
-                  title={skill.name}
-                  description={skill.description || "该技能已由 runtime 识别，但本地没有对应 manifest。"}
-                />
-                <Flex gap={8} wrap>
-                  <Tag color="purple">Runtime 识别</Tag>
-                  <Tag color={skill.eligible ? "blue" : "orange"}>
-                    {skill.eligible ? "可直接调用" : "已识别"}
-                  </Tag>
-                </Flex>
-              </List.Item>
-            )}
-          />
-        </Card>
-      ) : null}
     </Flex>
   );
 }

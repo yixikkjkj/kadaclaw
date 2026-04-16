@@ -1,65 +1,36 @@
 .chatPanel {
   height: 100%;
+  min-width: 0;
+  background: #fff;
 }
 
 .chatAuthAlert {
   margin: 16px 24px 0;
 }
 
-.workspaceBar {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 18px 24px 12px;
-  border-bottom: 1px solid rgba(19, 30, 26, 0.06);
-  background: rgba(251, 250, 245, 0.84);
-  backdrop-filter: blur(18px);
-}
-
-.workspaceEyebrow {
-  color: #6f877b;
-  font-size: 12px;
-  font-family:
-    "SFMono-Regular", "JetBrains Mono", "IBM Plex Mono", "Fira Code", "Menlo", "Consolas", monospace;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-}
-
 .workspaceTitle {
   margin: 6px 0 0 !important;
 }
 
-.workspaceMeta {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.workspaceTag {
-  margin-inline-end: 0;
-  border-radius: 999px;
-  background: #e9efeb;
-  color: #3f5b4f;
-}
-
 .chatMessageList {
   flex: 1;
-  overflow: auto;
+  min-width: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
   padding: 20px 24px 24px;
-  background:
-    radial-gradient(circle at top left, rgba(15, 123, 108, 0.05), transparent 26%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.36) 0%, rgba(243, 241, 234, 0.54) 100%);
+  background: #fff;
+  box-sizing: border-box;
 }
 
 .conversationRail {
-  max-width: 980px;
-  margin: 0 auto;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  margin: 0;
   display: flex;
   flex-direction: column;
   gap: 16px;
+  box-sizing: border-box;
 }
 
 .welcomeCard {
@@ -82,9 +53,11 @@
 
 .chatGroup {
   display: flex;
+  width: 100%;
+  min-width: 0;
   align-items: flex-start;
   gap: 16px;
-  margin-inline: 4px 16px;
+  box-sizing: border-box;
 }
 
 .userGroup {
@@ -121,6 +94,7 @@
   flex-direction: column;
   gap: 6px;
   flex: 1 1 auto;
+  min-width: 0;
   max-width: min(900px, 72%);
   align-items: flex-start;
 }
@@ -156,12 +130,16 @@
 .chatBubble {
   width: auto;
   max-width: 100%;
+  min-width: 0;
   padding: 12px 14px;
   border-radius: 18px;
   background: rgba(255, 255, 255, 0.82);
   border: 1px solid rgba(28, 35, 31, 0.06);
   box-shadow: 0 10px 24px rgba(23, 34, 29, 0.04);
   color: #17322b;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  box-sizing: border-box;
 }
 
 .userGroup .chatBubble {
@@ -201,18 +179,12 @@
 }
 
 @media (max-width: 768px) {
-  .workspaceBar {
-    padding: 16px 16px 10px;
-    flex-direction: column;
-  }
-
   .chatMessageList {
     padding: 16px;
   }
 
   .chatGroup {
     gap: 10px;
-    margin-right: 0;
   }
 
   .chatAvatar {

@@ -30,6 +30,7 @@ metadata: {"openclaw":{"requires":{"config":["browser.enabled"]}}}
    - `domExtractorImplemented`
    - `suggestedOutputPath`
 4. 按 `browserSteps` 顺序执行浏览器操作
+   - 若浏览器工具使用 `act` 请求格式，必须把每一步的 `kind` 原样带上
 5. 解析最后一步返回的 JSON 字符串，组装为 `target`
 6. 生成 payload：
    - `context.platform`

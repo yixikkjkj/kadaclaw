@@ -1,5 +1,10 @@
 import { Alert, Button, Card, Descriptions, Drawer, Flex, Tag, Typography } from "antd";
 import { useMemo } from "react";
+import {
+  getSkillAuthorLabel,
+  getSkillCategoryLabel,
+  getSkillSourceLabel,
+} from "~/common/skillDisplay";
 import { useSkillStore } from "~/store";
 
 const { Paragraph, Text } = Typography;
@@ -36,6 +41,8 @@ export function SkillDetailDrawer() {
   const displayName = installedSummary?.name ?? recognizedSummary?.name ?? selectedSkillId;
   const displaySummary =
     installedSummary?.summary ?? recognizedSummary?.description ?? "暂无技能说明。";
+  const enabled =
+    installedSummary?.enabled ?? (recognizedSummary ? !recognizedSummary.disabled : false);
 
   return (
     <Drawer
@@ -68,10 +75,10 @@ export function SkillDetailDrawer() {
           <Alert
             type="info"
             showIcon
-            message={recognizedSummary ? "当前能力已由 Runtime 识别" : "当前能力尚未启用"}
+            message={recognizedSummary ? "当前能力已被系统自动识别" : "当前能力尚未启用"}
             description={
               recognizedSummary
-                ? "该能力可以被当前 runtime 看见，但本地没有对应 manifest。你仍然可以查看说明并在对话中尝试调用。"
+                ? "该能力已经被当前系统识别，但本地没有对应 manifest。你仍然可以查看说明并在对话中尝试调用。"
                 : "你可以先查看输入要求和示例提问，再决定是否接入对应能力。"
             }
           />
@@ -79,16 +86,32 @@ export function SkillDetailDrawer() {
 
         <Flex gap={8} wrap>
           <Tag color="green">v{installedSummary?.version ?? "preview"}</Tag>
-          <Tag>{installedSummary?.author ?? "OpenClaw Runtime"}</Tag>
-          <Tag color="gold">{installedSummary?.category ?? "Runtime"}</Tag>
+          <Tag>
+            {getSkillAuthorLabel(
+              installedSummary?.author,
+              installedSummary?.sourceType ?? "runtime",
+            )}
+          </Tag>
+          <Tag color="gold">
+            {getSkillCategoryLabel(
+              installedSummary?.category,
+              installedSummary?.sourceType ?? "runtime",
+            )}
+          </Tag>
           {installedSummary?.sourceLabel ? (
             <Tag color={installedSummary.sourceType === "bundled" ? "blue" : "geekblue"}>
-              {installedSummary.sourceLabel}
+              {getSkillSourceLabel(installedSummary.sourceLabel, installedSummary.sourceType)}
             </Tag>
           ) : recognizedSummary ? (
-            <Tag color="purple">Runtime 识别</Tag>
+            <Tag color="purple">自动识别</Tag>
           ) : null}
-          {installed ? <Tag color="blue">已启用</Tag> : ready ? <Tag color="blue">可直接调用</Tag> : <Tag>待启用</Tag>}
+          {installed ? (
+            <Tag color={enabled ? "blue" : undefined}>{enabled ? "已启用" : "已关闭"}</Tag>
+          ) : ready ? (
+            <Tag color="blue">可直接调用</Tag>
+          ) : (
+            <Tag>待启用</Tag>
+          )}
         </Flex>
 
         <Paragraph>{displaySummary}</Paragraph>
@@ -97,15 +120,24 @@ export function SkillDetailDrawer() {
           <Descriptions column={1} size="small">
             <Descriptions.Item label="技能 ID">{selectedSkillId}</Descriptions.Item>
             <Descriptions.Item label="版本">{installedSummary?.version ?? "--"}</Descriptions.Item>
-            <Descriptions.Item label="作者">{installedSummary?.author ?? "--"}</Descriptions.Item>
+            <Descriptions.Item label="作者">
+              {getSkillAuthorLabel(installedSummary?.author, installedSummary?.sourceType)}
+            </Descriptions.Item>
             <Descriptions.Item label="分类">
-              {installedSummary?.category ?? "--"}
+              {getSkillCategoryLabel(installedSummary?.category, installedSummary?.sourceType)}
             </Descriptions.Item>
             {installedSummary ? (
-              <Descriptions.Item label="来源">{installedSummary.sourceLabel}</Descriptions.Item>
+              <Descriptions.Item label="启用状态">
+                {installedSummary.enabled ? "启用" : "关闭"}
+              </Descriptions.Item>
+            ) : null}
+            {installedSummary ? (
+              <Descriptions.Item label="来源">
+                {getSkillSourceLabel(installedSummary.sourceLabel, installedSummary.sourceType)}
+              </Descriptions.Item>
             ) : null}
             {recognizedSummary && !installedSummary ? (
-              <Descriptions.Item label="来源">Runtime 识别</Descriptions.Item>
+              <Descriptions.Item label="来源">自动识别</Descriptions.Item>
             ) : null}
             {installedSummary ? (
               <Descriptions.Item label="Manifest">
@@ -119,9 +151,7 @@ export function SkillDetailDrawer() {
         </Card>
 
         <Card title="状态说明">
-          <Text type="secondary">
-            当前页面展示的是本地技能与 runtime 实际识别结果。
-          </Text>
+          <Text type="secondary">当前页面展示的是本地技能与 runtime 实际识别结果。</Text>
         </Card>
       </Flex>
     </Drawer>

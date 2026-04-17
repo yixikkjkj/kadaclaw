@@ -3,10 +3,12 @@ window.TASK = {
   qaLimit: __QA_LIMIT__,
 };
 
-window.normalizeText = (value) => String(value ?? "").replace(/\s+/g, " ").trim();
+window.normalizeText = (value) =>
+  String(value ?? "")
+    .replace(/\s+/g, " ")
+    .trim();
 window.wait = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
-window.getVisibleText = (node) =>
-  window.normalizeText(node?.innerText ?? node?.textContent ?? "");
+window.getVisibleText = (node) => window.normalizeText(node?.innerText ?? node?.textContent ?? "");
 window.waitForDocumentReady = async (timeoutMs = 10000) => {
   if (document.readyState === "interactive" || document.readyState === "complete") {
     return document.readyState;
@@ -42,10 +44,7 @@ window.isVisible = (node) => {
   const style = window.getComputedStyle(node);
   const rect = node.getBoundingClientRect();
   return (
-    style.display !== "none" &&
-    style.visibility !== "hidden" &&
-    rect.width > 0 &&
-    rect.height > 0
+    style.display !== "none" && style.visibility !== "hidden" && rect.width > 0 && rect.height > 0
   );
 };
 window.clickElement = async (node) => {
@@ -108,7 +107,7 @@ window.getClassNameText = (node) => {
   return "";
 };
 
-window.BUTTON_LIKE_SELECTORS = [
+window.SEMANTIC_BUTTON_SELECTORS = [
   "button",
   "a",
   "[role=button]",
@@ -117,46 +116,98 @@ window.BUTTON_LIKE_SELECTORS = [
   "[class*=Btn]",
   "[class*=button]",
   "[class*=Button]",
-  "div",
-  "span",
-  "li",
 ].join(",");
-
-window.REVIEW_TRIGGER_KEYWORDS = ["查看全部评价", "全部评价", "宝贝评价", "商品评价", "累计评价"];
-window.QA_TRIGGER_KEYWORDS = ["查看全部问答", "全部问答", "商品问答", "宝贝问答", "问大家"];
-window.REVIEW_CONTAINER_SELECTORS = [
-  "[class*=Comment]",
-  "[class*=comment]",
-  "[class*=Review]",
-  "[class*=review]",
-  "[class*=rate]",
-  "[data-testid*=review]",
+window.BUTTON_LIKE_SELECTORS = [window.SEMANTIC_BUTTON_SELECTORS, "div", "span", "li"].join(",");
+window.OVERLAY_SELECTORS = [
+  "[role=dialog]",
+  "[class*=drawer]",
+  "[class*=Drawer]",
+  "[class*=popup]",
+  "[class*=Popup]",
+  "[class*=modal]",
+  "[class*=Modal]",
+  "[class*=overlay]",
+  "[class*=Overlay]",
 ];
-window.QA_CONTAINER_SELECTORS = [
-  "[class*=qaListContainer]",
-  "[class*=qaList]",
-  "[class*=questionList]",
-  "[class*=askList]",
-  "[data-testid*=qa]",
-];
-window.REVIEW_ITEM_SELECTORS = [
-  "[class*=Comment]",
-  "[class*=reviewItem]",
-  "[class*=rateItem]",
-  "[class*=commentItem]",
-  "[class*=ReviewItem]",
-  "[class*=commentCard]",
-  "[class*=reviewCard]",
-  "[class*=feedItem]",
-  "[data-testid*=review]",
-];
-window.QA_ITEM_SELECTORS = [
-  "[class*=qaItem]",
-  "[class*=questionItem]",
-  "[class*=askItem]",
-  "[class*=QaItem]",
-  "[data-testid*=question]",
-];
+window.EXTRACTION_RULES = {
+  review: {
+    triggerKeywords: ["查看全部评价", "全部评价", "宝贝评价", "商品评价", "累计评价"],
+    containerSelectors: [
+      "[class*=Comment]",
+      "[class*=comment]",
+      "[class*=Review]",
+      "[class*=review]",
+      "[class*=rate]",
+      "[data-testid*=review]",
+    ],
+    itemSelectors: [
+      "[class*=Comment]",
+      "[class*=reviewItem]",
+      "[class*=rateItem]",
+      "[class*=commentItem]",
+      "[class*=ReviewItem]",
+      "[class*=commentCard]",
+      "[class*=reviewCard]",
+      "[class*=feedItem]",
+      "[data-testid*=review]",
+    ],
+    textSelectors: [
+      "[class*=content]",
+      "[class*=Content]",
+      "[class*=commentContent]",
+      "[class*=reviewText]",
+      "[class*=rateContent]",
+      "[class*=desc]",
+      "[class*=Desc]",
+      "[data-testid*=content]",
+      "blockquote",
+      "p",
+    ],
+    ratingSelectors: ["[class*=star]", "[class*=rate]", "[class*=score]"],
+    tagSelectors: ["[class*=tag]", "[class*=sku]", "[class*=append]"],
+    blockedTexts: ["查看全部评价", "查看全部回答", "收起"],
+    negativeKeywords: ["差", "一般", "失望", "问题", "退货", "退款", "破损", "慢"],
+    scrollRounds: {
+      drawer: 6,
+      page: 5,
+    },
+  },
+  qa: {
+    triggerKeywords: ["查看全部问答", "全部问答", "商品问答", "宝贝问答", "问大家"],
+    containerSelectors: [
+      "[class*=qaListContainer]",
+      "[class*=qaList]",
+      "[class*=questionList]",
+      "[class*=askList]",
+      "[data-testid*=qa]",
+    ],
+    itemSelectors: [
+      "[class*=qaItem]",
+      "[class*=questionItem]",
+      "[class*=askItem]",
+      "[class*=QaItem]",
+      "[data-testid*=question]",
+    ],
+    questionSelectors: [
+      "[class*=questionTitle]",
+      "[class*=question]",
+      "[class*=Question]",
+      "[class*=askTitle]",
+      "[class*=ask]",
+      "[data-testid*=question]",
+    ],
+    answerSelectors: [
+      "[class*=answerContent]",
+      "[class*=answer]",
+      "[class*=Answer]",
+      "[class*=replyContent]",
+      "[class*=reply]",
+      "[class*=Reply]",
+      "[data-testid*=answer]",
+    ],
+    expandAnswerKeywords: ["查看全部回答"],
+  },
+};
 
 window.getRuntimeBridge = () => {
   if (!window.__productReviewAnalysis) {
@@ -188,6 +239,46 @@ window.updateDiagnosticStage = (stage, patch = {}) => {
     ...patch,
   };
 };
+window.getObservedNode = (targetRoot) =>
+  targetRoot instanceof Document ? (targetRoot.documentElement ?? document.body) : targetRoot;
+window.observeUntil = (targetRoot, finder, timeoutMs = 6000, onFound) => {
+  const immediate = finder(targetRoot);
+  if (immediate) {
+    onFound?.(immediate);
+    return Promise.resolve(immediate);
+  }
+
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = (value) => {
+      if (done) {
+        return;
+      }
+      done = true;
+      window.clearTimeout(timer);
+      observer.disconnect();
+      if (value) {
+        onFound?.(value);
+      }
+      resolve(value);
+    };
+
+    const observer = new MutationObserver(() => {
+      const found = finder(targetRoot);
+      if (found) {
+        finish(found);
+      }
+    });
+
+    observer.observe(window.getObservedNode(targetRoot), {
+      childList: true,
+      subtree: true,
+      attributes: true,
+    });
+
+    const timer = window.setTimeout(() => finish(null), timeoutMs);
+  });
+};
 window.findFirstVisible = (root, selectors) => {
   for (const selector of window.asSelectorList(selectors)) {
     const node = root.querySelector(selector);
@@ -198,48 +289,18 @@ window.findFirstVisible = (root, selectors) => {
   return null;
 };
 window.waitForSelectors = async (root, selectors, timeoutMs = 6000) => {
-  const targetRoot =
-    root instanceof HTMLElement || root instanceof Document ? root : document;
-  const immediate = window.findFirstVisible(targetRoot, selectors);
-  if (immediate) {
-    window.recordRuntimeEvent("selector-ready", immediate.selector);
-    return immediate.node;
-  }
+  const targetRoot = root instanceof HTMLElement || root instanceof Document ? root : document;
+  const found = await window.observeUntil(
+    targetRoot,
+    (activeRoot) => window.findFirstVisible(activeRoot, selectors),
+    timeoutMs,
+    (match) => {
+      window.getRuntimeBridge().lastMatchedSelector = match.selector;
+      window.recordRuntimeEvent("selector-ready", match.selector);
+    },
+  );
 
-  return new Promise((resolve) => {
-    let done = false;
-    const finish = (node, selector = "") => {
-      if (done) {
-        return;
-      }
-      done = true;
-      window.clearTimeout(timer);
-      observer.disconnect();
-      if (selector) {
-        window.getRuntimeBridge().lastMatchedSelector = selector;
-        window.recordRuntimeEvent("selector-ready", selector);
-      }
-      resolve(node);
-    };
-
-    const observer = new MutationObserver(() => {
-      const found = window.findFirstVisible(targetRoot, selectors);
-      if (found) {
-        finish(found.node, found.selector);
-      }
-    });
-
-    const observedNode =
-      targetRoot instanceof Document ? targetRoot.documentElement ?? document.body : targetRoot;
-
-    observer.observe(observedNode, {
-      childList: true,
-      subtree: true,
-      attributes: true,
-    });
-
-    const timer = window.setTimeout(() => finish(null), timeoutMs);
-  });
+  return found?.node ?? null;
 };
 window.findClickableByKeywords = (root, keywords) =>
   Array.from(root.querySelectorAll(window.BUTTON_LIKE_SELECTORS))
@@ -253,16 +314,8 @@ window.findClickableByKeywords = (root, keywords) =>
     .sort((left, right) => {
       const leftText = window.getVisibleText(left);
       const rightText = window.getVisibleText(right);
-      const leftSemantic = Number(
-        left.matches(
-          "button, a, [role=button], [tabindex], [class*=btn], [class*=Btn], [class*=button], [class*=Button]"
-        )
-      );
-      const rightSemantic = Number(
-        right.matches(
-          "button, a, [role=button], [tabindex], [class*=btn], [class*=Btn], [class*=button], [class*=Button]"
-        )
-      );
+      const leftSemantic = Number(left.matches(window.SEMANTIC_BUTTON_SELECTORS));
+      const rightSemantic = Number(right.matches(window.SEMANTIC_BUTTON_SELECTORS));
       if (leftSemantic !== rightSemantic) {
         return rightSemantic - leftSemantic;
       }
@@ -274,47 +327,17 @@ window.getKeywordCandidatePreview = (root, keywords, limit = 5) =>
     .slice(0, limit)
     .map((node) => window.getVisibleText(node));
 window.waitForClickableByKeywords = async (root, keywords, timeoutMs = 6000) => {
-  const targetRoot =
-    root instanceof HTMLElement || root instanceof Document ? root : document;
-  const immediate = window.findClickableByKeywords(targetRoot, keywords)[0];
-  if (immediate) {
-    window.recordRuntimeEvent("button-ready", window.getVisibleText(immediate));
-    return immediate;
-  }
-
-  return new Promise((resolve) => {
-    let done = false;
-    const finish = (node) => {
-      if (done) {
-        return;
-      }
-      done = true;
-      window.clearTimeout(timer);
-      observer.disconnect();
-      if (node) {
+  const targetRoot = root instanceof HTMLElement || root instanceof Document ? root : document;
+  return (
+    (await window.observeUntil(
+      targetRoot,
+      (activeRoot) => window.findClickableByKeywords(activeRoot, keywords)[0] ?? null,
+      timeoutMs,
+      (node) => {
         window.recordRuntimeEvent("button-ready", window.getVisibleText(node));
-      }
-      resolve(node);
-    };
-
-    const observer = new MutationObserver(() => {
-      const found = window.findClickableByKeywords(targetRoot, keywords)[0];
-      if (found) {
-        finish(found);
-      }
-    });
-
-    const observedNode =
-      targetRoot instanceof Document ? targetRoot.documentElement ?? document.body : targetRoot;
-
-    observer.observe(observedNode, {
-      childList: true,
-      subtree: true,
-      attributes: true,
-    });
-
-    const timer = window.setTimeout(() => finish(null), timeoutMs);
-  });
+      },
+    )) ?? null
+  );
 };
 window.stepScroll = (target) => {
   if (target === document.body || target === document.documentElement) {
@@ -328,27 +351,21 @@ window.stepScroll = (target) => {
   const nextTop = target.scrollTop + Math.max(containerHeight * 0.75, 240);
   target.scrollTo({ top: nextTop, behavior: "smooth" });
 };
-window.smartScrollIfNeeded = async (container = document.documentElement, rounds = 4, delayMs = 900) => {
-  const target = container instanceof HTMLElement ? container : document.documentElement;
+window.scrollContainer = async (
+  container = document.documentElement,
+  rounds = 4,
+  delayMs = 900,
+) => {
+  const target =
+    container instanceof HTMLElement ? container : document.scrollingElement || document.body;
   for (let index = 0; index < rounds; index += 1) {
     window.stepScroll(target);
     await window.wait(delayMs);
   }
 };
+window.smartScrollIfNeeded = window.scrollContainer;
 window.getOverlayCandidates = () =>
-  Array.from(
-    document.querySelectorAll([
-      "[role=dialog]",
-      "[class*=drawer]",
-      "[class*=Drawer]",
-      "[class*=popup]",
-      "[class*=Popup]",
-      "[class*=modal]",
-      "[class*=Modal]",
-      "[class*=overlay]",
-      "[class*=Overlay]",
-    ].join(","))
-  )
+  Array.from(document.querySelectorAll(window.asSelectorText(window.OVERLAY_SELECTORS)))
     .filter((node) => node instanceof HTMLElement)
     .filter((node) => window.isVisible(node))
     .sort((left, right) => {
@@ -416,14 +433,6 @@ window.openOverlayByKeywords = async (keywords) => {
   });
   return null;
 };
-window.scrollContainer = async (container, rounds = 4, delayMs = 900) => {
-  const target =
-    container instanceof HTMLElement ? container : document.scrollingElement || document.body;
-  for (let index = 0; index < rounds; index += 1) {
-    window.stepScroll(target);
-    await window.wait(delayMs);
-  }
-};
 window.clickAllByKeywords = async (root, keywords) => {
   const clickedNodes = new WeakSet();
   let clickedCount = 0;
@@ -460,11 +469,18 @@ window.collectTexts = (root, selectors) => {
   }
   return result;
 };
-window.pickLongestText = (values, minLength = 6, maxLength = 600) => {
+window.splitVisibleLines = (node) =>
+  window
+    .getVisibleText(node)
+    .split(/\n+/)
+    .map((item) => window.normalizeText(item))
+    .filter(Boolean);
+window.pickLongestText = (values, minLength = 6, maxLength = 600, blockedTexts = []) => {
+  const blockedSet = new Set(blockedTexts);
   const candidates = values
     .map((value) => window.normalizeText(value))
     .filter((value) => value.length >= minLength && value.length <= maxLength)
-    .filter((value) => !["查看全部评价", "查看全部问答", "查看全部回答"].includes(value))
+    .filter((value) => !blockedSet.has(value))
     .sort((left, right) => right.length - left.length);
   return candidates[0] ?? "";
 };
@@ -484,68 +500,59 @@ window.uniqueJoin = (values, delimiter = " | ", maxCount = 4) => {
   }
   return result.join(delimiter);
 };
+window.collectLimitedItems = (nodes, { limit = Infinity, mapItem, getKey }) => {
+  const items = [];
+  const seen = new Set();
+  for (const node of nodes) {
+    const item = mapItem(node);
+    if (!item) {
+      continue;
+    }
+    const key = window.normalizeText(getKey(item));
+    if (!key || seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    items.push(item);
+    if (items.length >= limit) {
+      break;
+    }
+  }
+  return items;
+};
 window.extractReviewText = (node) => {
-  const directCandidates = window.collectTexts(node, [
-    "[class*=content]",
-    "[class*=Content]",
-    "[class*=commentContent]",
-    "[class*=reviewText]",
-    "[class*=rateContent]",
-    "[class*=desc]",
-    "[class*=Desc]",
-    "[data-testid*=content]",
-    "blockquote",
-    "p",
-  ]);
-  const longestDirect = window.pickLongestText(directCandidates, 6, 500);
+  const reviewRules = window.EXTRACTION_RULES.review;
+  const directCandidates = window.collectTexts(node, reviewRules.textSelectors);
+  const longestDirect = window.pickLongestText(directCandidates, 6, 500, reviewRules.blockedTexts);
   if (longestDirect) {
     return longestDirect;
   }
 
   const fallbackText = window
-    .getVisibleText(node)
-    .split(/\n+/)
-    .map((item) => window.normalizeText(item))
+    .splitVisibleLines(node)
     .filter((item) => item.length >= 6)
-    .filter((item) => !["查看全部评价", "查看全部回答", "收起"].includes(item));
-  return window.pickLongestText(fallbackText, 6, 500);
+    .filter((item) => !reviewRules.blockedTexts.includes(item));
+  return window.pickLongestText(fallbackText, 6, 500, reviewRules.blockedTexts);
 };
 window.extractQaQuestion = (node) => {
+  const qaRules = window.EXTRACTION_RULES.qa;
   const explicit = window.pickLongestText(
-    window.collectTexts(node, [
-      "[class*=questionTitle]",
-      "[class*=question]",
-      "[class*=Question]",
-      "[class*=askTitle]",
-      "[class*=ask]",
-      "[data-testid*=question]",
-    ]),
+    window.collectTexts(node, qaRules.questionSelectors),
     4,
-    300
+    300,
   );
   if (explicit) {
     return explicit.replace(/^(问\s*[:：]?)/, "").trim();
   }
 
-  const lines = window
-    .getVisibleText(node)
-    .split(/\n+/)
-    .map((item) => window.normalizeText(item))
-    .filter(Boolean);
-  const matched = lines.find((line) => /^问\s*[:：]?/.test(line)) ?? lines[0] ?? "";
-  return matched.replace(/^(问\s*[:：]?)/, "").trim();
+  const lines = window.splitVisibleLines(node);
+  const matched = lines.find((line) => /^问\s*[:：]?/.test(line));
+  return (matched ?? lines[0] ?? "").replace(/^(问\s*[:：]?)/, "").trim();
 };
 window.extractQaAnswer = (node, question) => {
+  const qaRules = window.EXTRACTION_RULES.qa;
   const explicit = window
-    .collectTexts(node, [
-      "[class*=answerContent]",
-      "[class*=answer]",
-      "[class*=Answer]",
-      "[class*=replyContent]",
-      "[class*=reply]",
-      "[class*=Reply]",
-      "[data-testid*=answer]",
-    ])
+    .collectTexts(node, qaRules.answerSelectors)
     .map((item) => item.replace(/^(答\s*[:：]?)/, "").trim())
     .filter((item) => item && item !== question);
   const explicitJoined = window.uniqueJoin(explicit, " || ", 3);
@@ -554,10 +561,7 @@ window.extractQaAnswer = (node, question) => {
   }
 
   const lines = window
-    .getVisibleText(node)
-    .split(/\n+/)
-    .map((item) => window.normalizeText(item))
-    .filter(Boolean)
+    .splitVisibleLines(node)
     .map((item) => item.replace(/^(答\s*[:：]?)/, "").trim())
     .filter((item) => item && item !== question);
   return window.uniqueJoin(lines, " || ", 3);
@@ -573,26 +577,34 @@ window.buildRuntimeDiagnostics = ({
   const bridge = window.getRuntimeBridge();
   const events = Array.isArray(bridge.events) ? bridge.events.slice(-20) : [];
   const diagnostics = bridge.diagnostics ?? {};
-  const issues = [];
-
-  if (!reviewDrawerOpened) {
-    issues.push("未确认打开评价抽屉，可能是评价入口文案或点击节点变更。");
-  }
-  if (reviewNodes.length === 0) {
-    issues.push("未匹配到评论节点，可能是评论列表容器或 item selector 已失效。");
-  }
-  if (reviewNodes.length > 0 && reviews.length === 0) {
-    issues.push("匹配到评论节点但未提取到正文，可能是评论正文 selector 已失效。");
-  }
-  if (!qaDrawerOpened) {
-    issues.push("未确认打开问答抽屉，可能是问答入口文案或点击节点变更。");
-  }
-  if (qaNodes.length === 0) {
-    issues.push("未匹配到问答节点，可能是问答列表容器或 item selector 已失效。");
-  }
-  if (qaNodes.length > 0 && qaPairs.length === 0) {
-    issues.push("匹配到问答节点但未提取到问题/回答，可能是问答内容 selector 已失效。");
-  }
+  const issues = [
+    {
+      when: !reviewDrawerOpened,
+      message: "未确认打开评价抽屉，可能是评价入口文案或点击节点变更。",
+    },
+    {
+      when: reviewNodes.length === 0,
+      message: "未匹配到评论节点，可能是评论列表容器或 item selector 已失效。",
+    },
+    {
+      when: reviewNodes.length > 0 && reviews.length === 0,
+      message: "匹配到评论节点但未提取到正文，可能是评论正文 selector 已失效。",
+    },
+    {
+      when: !qaDrawerOpened,
+      message: "未确认打开问答抽屉，可能是问答入口文案或点击节点变更。",
+    },
+    {
+      when: qaNodes.length === 0,
+      message: "未匹配到问答节点，可能是问答列表容器或 item selector 已失效。",
+    },
+    {
+      when: qaNodes.length > 0 && qaPairs.length === 0,
+      message: "匹配到问答节点但未提取到问题/回答，可能是问答内容 selector 已失效。",
+    },
+  ]
+    .filter((item) => item.when)
+    .map((item) => item.message);
 
   return {
     status: issues.length ? "degraded" : "ok",
@@ -616,54 +628,53 @@ window.buildRuntimeDiagnostics = ({
   };
 };
 window.collectReviews = async () => {
-  const drawer = await window.openOverlayByKeywords(window.REVIEW_TRIGGER_KEYWORDS);
+  const reviewRules = window.EXTRACTION_RULES.review;
+  const drawer = await window.openOverlayByKeywords(reviewRules.triggerKeywords);
+  const reviewRoot = drawer ?? document;
+
   window.updateDiagnosticStage("reviews", {
-    triggerKeywords: window.REVIEW_TRIGGER_KEYWORDS,
+    triggerKeywords: reviewRules.triggerKeywords,
     drawerOpened: Boolean(drawer),
-    containerSelectors: window.REVIEW_CONTAINER_SELECTORS,
-    itemSelectors: window.REVIEW_ITEM_SELECTORS,
+    containerSelectors: reviewRules.containerSelectors,
+    itemSelectors: reviewRules.itemSelectors,
   });
-  await window.waitForSelectors(drawer ?? document, window.REVIEW_CONTAINER_SELECTORS, 6000);
-  await window.smartScrollIfNeeded(drawer ?? document.documentElement, drawer ? 6 : 5, 900);
-  await window.waitForSelectors(drawer ?? document, window.REVIEW_CONTAINER_SELECTORS, 3000);
+
+  await window.waitForSelectors(reviewRoot, reviewRules.containerSelectors, 6000);
+  await window.scrollContainer(
+    drawer ?? document.documentElement,
+    drawer ? reviewRules.scrollRounds.drawer : reviewRules.scrollRounds.page,
+    900,
+  );
+  await window.waitForSelectors(reviewRoot, reviewRules.containerSelectors, 3000);
 
   const reviewNodes = Array.from(
-    (drawer ?? document).querySelectorAll(window.asSelectorText(window.REVIEW_ITEM_SELECTORS))
+    reviewRoot.querySelectorAll(window.asSelectorText(reviewRules.itemSelectors)),
   );
+  const items = window.collectLimitedItems(reviewNodes, {
+    limit: window.TASK.reviewLimit,
+    mapItem: (node) => {
+      const text = window.normalizeText(window.extractReviewText(node));
+      if (!text) {
+        return null;
+      }
 
-  const items = [];
-  const seen = new Set();
-  for (const node of reviewNodes) {
-    const text = window.extractReviewText(node);
-    const rating = window.pickText(node, ["[class*=star]", "[class*=rate]", "[class*=score]"]);
-    const tag = window.pickTexts(node, [
-      "[class*=tag]",
-      "[class*=sku]",
-      "[class*=append]",
-    ]).join(" | ");
-    const normalized = window.normalizeText(text);
-    if (!normalized || seen.has(normalized)) {
-      continue;
-    }
-    seen.add(normalized);
-    items.push({
-      text: normalized,
-      rating,
-      tag,
-      isNegative: ["差", "一般", "失望", "问题", "退货", "退款", "破损", "慢"].some((keyword) =>
-        normalized.includes(keyword)
-      ),
-    });
-    if (items.length >= TASK.reviewLimit) {
-      break;
-    }
-  }
+      return {
+        text,
+        rating: window.pickText(node, reviewRules.ratingSelectors),
+        tag: window.pickTexts(node, reviewRules.tagSelectors).join(" | "),
+        isNegative: reviewRules.negativeKeywords.some((keyword) => text.includes(keyword)),
+      };
+    },
+    getKey: (item) => item.text,
+  });
+
   window.updateDiagnosticStage("reviews", {
     drawerOpened: Boolean(drawer),
     nodeCount: reviewNodes.length,
     sampleCount: items.length,
     samplePreview: items.slice(0, 3).map((item) => item.text),
   });
+
   return {
     drawerOpened: Boolean(drawer),
     nodes: reviewNodes,
@@ -671,45 +682,49 @@ window.collectReviews = async () => {
   };
 };
 window.collectQaPairs = async () => {
-  const drawer = await window.openOverlayByKeywords(window.QA_TRIGGER_KEYWORDS);
+  const qaRules = window.EXTRACTION_RULES.qa;
+  const drawer = await window.openOverlayByKeywords(qaRules.triggerKeywords);
   const qaRoot =
-    (await window.waitForSelectors(drawer ?? document, window.QA_CONTAINER_SELECTORS, 6000)) ||
+    (await window.waitForSelectors(drawer ?? document, qaRules.containerSelectors, 6000)) ||
     drawer ||
     document;
+
   window.updateDiagnosticStage("qa", {
-    triggerKeywords: window.QA_TRIGGER_KEYWORDS,
+    triggerKeywords: qaRules.triggerKeywords,
     drawerOpened: Boolean(drawer),
-    containerSelectors: window.QA_CONTAINER_SELECTORS,
-    itemSelectors: window.QA_ITEM_SELECTORS,
+    containerSelectors: qaRules.containerSelectors,
+    itemSelectors: qaRules.itemSelectors,
   });
+
   await window.scrollContainer(qaRoot, 4, 800);
-  await window.clickAllByKeywords(qaRoot, ["查看全部回答"]);
+  await window.clickAllByKeywords(qaRoot, qaRules.expandAnswerKeywords);
   await window.scrollContainer(qaRoot, 4, 900);
-  await window.waitForSelectors(qaRoot, window.QA_ITEM_SELECTORS, 3000);
+  await window.waitForSelectors(qaRoot, qaRules.itemSelectors, 3000);
 
-  const qaNodes = Array.from(qaRoot.querySelectorAll(window.asSelectorText(window.QA_ITEM_SELECTORS)));
+  const qaNodes = Array.from(qaRoot.querySelectorAll(window.asSelectorText(qaRules.itemSelectors)));
+  const items = window.collectLimitedItems(qaNodes, {
+    limit: window.TASK.qaLimit,
+    mapItem: (node) => {
+      const question = window.extractQaQuestion(node);
+      if (!question) {
+        return null;
+      }
 
-  const items = [];
-  const seen = new Set();
-  for (const node of qaNodes) {
-    const question = window.extractQaQuestion(node);
-    const answer = window.extractQaAnswer(node, question);
-    const key = window.normalizeText(`${question}|${answer}`);
-    if (!question || seen.has(key)) {
-      continue;
-    }
-    seen.add(key);
-    items.push({ question, answer });
-    if (items.length >= TASK.qaLimit) {
-      break;
-    }
-  }
+      return {
+        question,
+        answer: window.extractQaAnswer(node, question),
+      };
+    },
+    getKey: (item) => `${item.question}|${item.answer}`,
+  });
+
   window.updateDiagnosticStage("qa", {
     drawerOpened: Boolean(drawer),
     nodeCount: qaNodes.length,
     sampleCount: items.length,
     samplePreview: items.slice(0, 3).map((item) => item.question),
   });
+
   return {
     drawerOpened: Boolean(drawer),
     nodes: qaNodes,

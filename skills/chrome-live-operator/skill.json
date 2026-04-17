@@ -1,0 +1,9 @@
+{
+  "id": "chrome-live-operator",
+  "name": "Chrome 实时会话操作",
+  "category": "浏览器自动化",
+  "summary": "附着到当前已登录的 Chrome，会在真实浏览器会话里打开页面、点击、输入、读取内容和执行常见网页操作。",
+  "author": "Codex",
+  "version": "0.1.0",
+  "entry": "SKILL.md"
+}

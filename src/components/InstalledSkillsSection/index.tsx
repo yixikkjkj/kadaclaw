@@ -8,10 +8,16 @@ import {
   Flex,
   List,
   Row,
+  Switch,
   Tag,
   Typography,
 } from "antd";
 import { useMemo } from "react";
+import {
+  getSkillAuthorLabel,
+  getSkillCategoryLabel,
+  getSkillSourceLabel,
+} from "~/common/skillDisplay";
 import { useSkillStore } from "~/store";
 import styles from "./index.css";
 
@@ -31,6 +37,7 @@ interface InstalledSkillListItem {
   removable: boolean;
   recognized: boolean;
   eligible: boolean;
+  enabled: boolean;
 }
 
 export function InstalledSkillsSection() {
@@ -42,6 +49,7 @@ export function InstalledSkillsSection() {
   const skillOperations = useSkillStore((state) => state.skillOperations);
   const skillOperationError = useSkillStore((state) => state.skillOperationError);
   const removeInstalledSkill = useSkillStore((state) => state.removeInstalledSkill);
+  const setInstalledSkillEnabled = useSkillStore((state) => state.setInstalledSkillEnabled);
 
   const mergedSkills = useMemo<InstalledSkillListItem[]>(() => {
     const installedItems: InstalledSkillListItem[] = installedSkills.map((skill) => ({
@@ -55,15 +63,16 @@ export function InstalledSkillsSection() {
       .map((record) => ({
         id: record.name,
         name: record.name,
-        category: "Runtime",
-        summary: record.description || "该技能已被当前 runtime 识别。",
-        author: "OpenClaw Runtime",
-        version: "runtime",
-        sourceLabel: "Runtime 识别",
+        category: "系统能力",
+        summary: record.description || "该技能已被当前系统自动识别。",
+        author: "系统提供",
+        version: "系统提供",
+        sourceLabel: "自动识别",
         sourceType: "runtime",
         removable: false,
         recognized: true,
         eligible: record.eligible,
+        enabled: !record.disabled,
       }));
 
     return [...installedItems, ...recognizedOnlyItems].sort((left, right) =>
@@ -78,7 +87,8 @@ export function InstalledSkillsSection() {
           <Alert type="error" showIcon message={skillOperationError} style={{ marginBottom: 16 }} />
         ) : null}
         <Paragraph type="secondary">
-          这里同时展示本地已安装技能和当前 runtime 已识别技能。只要 OpenClaw 已识别并就绪，就可以在对话中直接调用。
+          这里同时展示本地已安装技能和当前 runtime 已识别技能。只要 OpenClaw
+          已识别并就绪，就可以在对话中直接调用。
         </Paragraph>
         <List
           dataSource={mergedSkills}
@@ -90,30 +100,51 @@ export function InstalledSkillsSection() {
             const busy = Boolean(operation);
             return (
               <List.Item
-                actions={[
-                  <Button
-                    key="view"
-                    type="link"
-                    disabled={busy}
-                    onClick={() => openSkill(skill.id)}
-                  >
-                    详情
-                  </Button>,
-                  <Button
-                    key="remove"
-                    loading={busy}
-                    disabled={busy || !skill.removable}
-                    onClick={() => void removeInstalledSkill(skill.id, skill.name)}
-                  >
-                    {skill.removable
-                      ? operation === "removing"
-                        ? "卸载中"
-                        : "卸载"
-                      : skill.sourceType === "runtime"
-                        ? "Runtime"
-                        : "外部目录"}
-                  </Button>,
-                ]}
+                actions={
+                  skill.sourceType === "runtime"
+                    ? [
+                        <Button
+                          key="view"
+                          type="link"
+                          disabled={busy}
+                          onClick={() => openSkill(skill.id)}
+                        >
+                          详情
+                        </Button>,
+                        <Button key="remove" disabled>
+                          仅识别
+                        </Button>,
+                      ]
+                    : [
+                        <Switch
+                          key="switch"
+                          checked={skill.enabled}
+                          checkedChildren="启用"
+                          unCheckedChildren="关闭"
+                          loading={operation === "toggling"}
+                          disabled={busy}
+                          onChange={(checked) =>
+                            void setInstalledSkillEnabled(skill.id, skill.name, checked)
+                          }
+                        />,
+                        <Button
+                          key="view"
+                          type="link"
+                          disabled={busy}
+                          onClick={() => openSkill(skill.id)}
+                        >
+                          详情
+                        </Button>,
+                        <Button
+                          key="remove"
+                          loading={operation === "removing"}
+                          disabled={busy || !skill.removable}
+                          onClick={() => void removeInstalledSkill(skill.id, skill.name)}
+                        >
+                          {skill.removable ? "卸载" : "外部目录"}
+                        </Button>,
+                      ]
+                }
               >
                 <List.Item.Meta
                   avatar={
@@ -126,14 +157,14 @@ export function InstalledSkillsSection() {
                     <Flex vertical gap={6}>
                       <Text>{skill.summary}</Text>
                       <Text type="secondary">
-                        {skill.category} · {skill.version}
+                        {getSkillCategoryLabel(skill.category, skill.sourceType)} · {skill.version}
                       </Text>
                     </Flex>
                   }
                 />
                 <Flex gap={8} wrap>
-                  <Tag color="gold">{skill.category}</Tag>
-                  <Tag>{skill.author}</Tag>
+                  <Tag color="gold">{getSkillCategoryLabel(skill.category, skill.sourceType)}</Tag>
+                  <Tag>{getSkillAuthorLabel(skill.author, skill.sourceType)}</Tag>
                   <Tag
                     color={
                       skill.sourceType === "bundled"
@@ -143,11 +174,16 @@ export function InstalledSkillsSection() {
                           : "purple"
                     }
                   >
-                    {skill.sourceLabel}
+                    {getSkillSourceLabel(skill.sourceLabel, skill.sourceType)}
                   </Tag>
                   {skill.recognized ? (
                     <Tag color={skill.eligible ? "blue" : "orange"}>
                       {skill.eligible ? "已识别并就绪" : "已识别"}
+                    </Tag>
+                  ) : null}
+                  {skill.sourceType !== "runtime" ? (
+                    <Tag color={skill.enabled ? "blue" : undefined}>
+                      {skill.enabled ? "已启用" : "已关闭"}
                     </Tag>
                   ) : null}
                 </Flex>
@@ -167,7 +203,9 @@ export function InstalledSkillsSection() {
               <Card>
                 <Descriptions column={1} size="small">
                   <Descriptions.Item label="技能 ID">{skill.id}</Descriptions.Item>
-                  <Descriptions.Item label="来源">{skill.sourceLabel}</Descriptions.Item>
+                  <Descriptions.Item label="来源">
+                    {getSkillSourceLabel(skill.sourceLabel, skill.sourceType)}
+                  </Descriptions.Item>
                   <Descriptions.Item label="Manifest">{skill.manifestPath}</Descriptions.Item>
                   <Descriptions.Item label="目录">{skill.directory}</Descriptions.Item>
                 </Descriptions>

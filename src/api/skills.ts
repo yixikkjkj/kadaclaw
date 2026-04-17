@@ -7,6 +7,7 @@ export interface InstalledSkillRecord {
   summary: string;
   author: string;
   version: string;
+  enabled: boolean;
   manifestPath: string;
   directory: string;
   sourceLabel: string;
@@ -51,5 +52,12 @@ export function installSkillFromUrl(url: string) {
 export function removeSkill(skillId: string) {
   return invoke<boolean>("remove_skill", {
     skillId,
+  });
+}
+
+export function setSkillEnabled(skillId: string, enabled: boolean) {
+  return invoke<boolean>("set_skill_enabled", {
+    skillId,
+    enabled,
   });
 }

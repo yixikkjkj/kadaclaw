@@ -4,6 +4,7 @@ import {
   Button,
   Card,
   Col,
+  Collapse,
   Descriptions,
   Flex,
   Form,
@@ -103,6 +104,9 @@ export function SettingsPage() {
   const setRuntimeState = useRuntimeStore((state) => state.setRuntimeState);
   const refreshInstalledSkills = useSkillStore((state) => state.refreshInstalledSkills);
   const windowsHost = isWindowsHost();
+  const runtimeReady = runtimeStatus?.reachable ?? false;
+  const runtimeInstalled = runtimeInfo?.installed ?? false;
+  const authReady = authConfig?.apiKeyConfigured ?? false;
 
   const refreshRuntimeInfo = async () => {
     try {
@@ -300,7 +304,9 @@ export function SettingsPage() {
         return;
       }
 
-      const nextDirectories = Array.from(new Set([...parseLocalSkillsDirsInput(localSkillsDirsInput), directory]));
+      const nextDirectories = Array.from(
+        new Set([...parseLocalSkillsDirsInput(localSkillsDirsInput), directory]),
+      );
       setLocalSkillsDirsInput(nextDirectories.join("\n"));
       message.success("目录已加入列表，点击“保存本地目录”后生效");
     } catch (error) {
@@ -352,6 +358,27 @@ export function SettingsPage() {
     }
   };
 
+  const saveAuth = async () => {
+    setLoading(true);
+    try {
+      const values = await authForm.validateFields();
+      const saved = await saveOpenClawAuthConfig(values);
+      setAuthConfig(saved);
+      authForm.setFieldsValue({
+        provider: saved.provider,
+        model: saved.model,
+        apiKey: "",
+        apiBaseUrl: saved.apiBaseUrl ?? "",
+      });
+      form.setFieldValue("model", saved.model);
+      message.success("模型与授权已保存到内置 OpenClaw");
+    } catch (error) {
+      message.error(`保存授权配置失败: ${String(error)}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <Flex vertical gap={20}>
       <Card className={styles.settingsHero}>
@@ -361,24 +388,23 @@ export function SettingsPage() {
               Runtime Hub
             </Tag>
             <Title level={1} className={styles.workspaceTitle}>
-              内置 OpenClaw 管理中心
+              运行环境与模型设置
             </Title>
             <Paragraph className={styles.heroCopy}>
-              安装、升级、探测和高级配置都集中在这里。目标不是暴露更多复杂度，而是把 OpenClaw
-              的运行时管理真正收进 Kadaclaw 客户端。
+              日常只需要确认运行环境可用、模型授权已配置，就可以直接开始使用。更底层的参数和诊断信息已经收口到高级区域里。
             </Paragraph>
             <Flex gap={8} wrap style={{ marginBottom: 8 }}>
               <Button type="primary" loading={loading} onClick={() => void installBundledRuntime()}>
-                一键安装内置 OpenClaw
+                安装或修复运行环境
+              </Button>
+              <Button loading={loading} onClick={() => void launchRuntime()}>
+                启动运行环境
+              </Button>
+              <Button loading={loading} onClick={() => void runProbe()}>
+                重新检查
               </Button>
               <Button loading={loading} onClick={() => void upgradeBundledRuntime()}>
                 升级内置 OpenClaw
-              </Button>
-              <Button loading={loading} onClick={() => void launchRuntime()}>
-                启动已安装 Runtime
-              </Button>
-              <Button loading={loading} onClick={() => void runProbe()}>
-                检测当前 Runtime
               </Button>
             </Flex>
           </div>
@@ -389,12 +415,14 @@ export function SettingsPage() {
                 <Title level={3}>当前环境</Title>
                 <div className={styles.runtimeMetaGrid}>
                   <div>
-                    <Text type="secondary">安装状态</Text>
-                    <strong>{runtimeInfo?.installed ? "已安装" : "未安装"}</strong>
+                    <Text type="secondary">运行环境</Text>
+                    <strong>
+                      {runtimeReady ? "已就绪" : runtimeInstalled ? "待启动" : "未安装"}
+                    </strong>
                   </div>
                   <div>
-                    <Text type="secondary">版本</Text>
-                    <strong>{runtimeInfo?.version ?? "--"}</strong>
+                    <Text type="secondary">模型授权</Text>
+                    <strong>{authReady ? "已配置" : "未配置"}</strong>
                   </div>
                 </div>
               </div>
@@ -412,95 +440,39 @@ export function SettingsPage() {
         />
       ) : null}
 
-      <Card
-        title="安装后自检"
-        extra={
-          <Flex align="center" gap={12}>
-            <Text type="secondary">上次检查：{formatCheckTime(selfCheckResult?.checkedAt)}</Text>
-            <Button size="small" loading={loading} onClick={() => void runProbe()}>
-              重新执行自检
-            </Button>
-          </Flex>
-        }
-      >
-        <Descriptions column={1} size="small">
-          {selfChecks.map((item) => (
-            <Descriptions.Item key={item.key} label={item.label}>
-              <Flex vertical gap={4}>
-                {getSelfCheckBadge(item.status)}
-                <Text type="secondary">{item.detail}</Text>
-                {item.suggestion ? <Text>{item.suggestion}</Text> : null}
-              </Flex>
-            </Descriptions.Item>
-          ))}
-        </Descriptions>
-      </Card>
-
-      <Card title="OpenClaw Runtime 配置">
-        <Paragraph type="secondary">
-          默认情况下 Kadaclaw 会托管内置
-          runtime。这里保留高级入口，方便你覆盖默认端口、模型和启动参数。
-        </Paragraph>
-
-        <Form form={form} layout="vertical" initialValues={{ enabled: true }}>
-          <Row gutter={[16, 0]}>
-            <Col xs={24} md={12}>
-              <Form.Item label="启用 Runtime" name="enabled" valuePropName="checked">
-                <Switch />
-              </Form.Item>
-            </Col>
-            <Col xs={24} md={12}>
-              <Form.Item label="显示名称" name="displayName" rules={[{ required: true }]}>
-                <Input placeholder="OpenClaw Runtime" />
-              </Form.Item>
-            </Col>
-            <Col xs={24} md={12}>
-              <Form.Item label="Base URL" name="baseUrl" rules={[{ required: true }]}>
-                <Input placeholder="http://127.0.0.1:18795" />
-              </Form.Item>
-            </Col>
-            <Col xs={24} md={12}>
-              <Form.Item label="健康检查路径" name="healthPath" rules={[{ required: true }]}>
-                <Input placeholder="/v1/models" />
-              </Form.Item>
-            </Col>
-            <Col xs={24} md={12}>
-              <Form.Item label="模型" name="model" rules={[{ required: true }]}>
-                <Input placeholder="anthropic/claude-opus-4-6" />
-              </Form.Item>
-            </Col>
-            <Col xs={24} md={12}>
-              <Form.Item label="启动命令" name="command" rules={[{ required: true }]}>
-                <Input placeholder="openclaw" />
-              </Form.Item>
-            </Col>
-            <Col xs={24}>
-              <Form.Item label="启动参数" name="args">
-                <Input placeholder="gateway run --allow-unconfigured --auth none --port 18795 --force" />
-              </Form.Item>
-            </Col>
-            <Col xs={24}>
-              <Form.Item label="工作目录" name="workingDirectory">
-                <Input placeholder="/path/to/openclaw" />
-              </Form.Item>
-            </Col>
-          </Row>
-          <Flex gap={8} wrap>
-            <Button type="primary" loading={loading} onClick={() => void saveConfig()}>
-              保存并检测
-            </Button>
-            <Button loading={loading} onClick={() => void runProbe()}>
-              只检测
-            </Button>
-          </Flex>
-        </Form>
+      <Card title="当前准备状态">
+        <div className={styles.readinessGrid}>
+          <div className={styles.readinessCard}>
+            <Text type="secondary">运行环境</Text>
+            <strong>
+              {runtimeReady ? "已就绪" : runtimeInstalled ? "已安装，等待启动" : "尚未安装"}
+            </strong>
+            <Text type="secondary">
+              {runtimeReady
+                ? "Kadaclaw 已经可以连接到本地运行环境。"
+                : runtimeInstalled
+                  ? "运行环境已经安装完成，但当前还没有成功连接。"
+                  : "建议先安装内置运行环境，避免额外配置。"}
+            </Text>
+          </div>
+          <div className={styles.readinessCard}>
+            <Text type="secondary">模型授权</Text>
+            <strong>{authReady ? "已配置" : "尚未配置"}</strong>
+            <Text type="secondary">
+              {authReady
+                ? `当前会按 ${authConfig?.model ?? "--"} 发起请求。`
+                : "还需要选择模型提供方并填写 API Key，完成后才能正式开始聊天。"}
+            </Text>
+          </div>
+        </div>
       </Card>
 
       <Card title="本地 Skills 目录">
         <Flex vertical gap={16}>
           <Paragraph type="secondary">
-            这里可以接入你自己机器上的 Skills 目录。每行填写一个目录路径，保存后 Kadaclaw 会自动创建缺失目录，并把它们写入 OpenClaw 的
-            `skills.load.extraDirs`，让 runtime 识别这些本地技能。
+            这里可以接入你自己机器上的 Skills 目录。每行填写一个目录路径，保存后 Kadaclaw
+            会自动创建缺失目录，并把它们写入 OpenClaw 的 `skills.load.extraDirs`，让 runtime
+            识别这些本地技能。
           </Paragraph>
           <TextArea
             rows={5}
@@ -516,14 +488,16 @@ export function SettingsPage() {
             <Button loading={loading} onClick={() => void appendLocalSkillsDirectory()}>
               选择目录并追加
             </Button>
-            <Button type="primary" loading={loading} onClick={() => void saveLocalSkillsDirectories()}>
+            <Button
+              type="primary"
+              loading={loading}
+              onClick={() => void saveLocalSkillsDirectories()}
+            >
               保存本地目录
             </Button>
             <Button
               loading={loading}
-              onClick={() =>
-                setLocalSkillsDirsInput(runtimeInfo?.localSkillsDirs.join("\n") ?? "")
-              }
+              onClick={() => setLocalSkillsDirsInput(runtimeInfo?.localSkillsDirs.join("\n") ?? "")}
             >
               恢复当前配置
             </Button>
@@ -566,7 +540,7 @@ export function SettingsPage() {
                       }
                       authForm.setFieldsValue({
                         model: next.model,
-                        apiBaseUrl: value === "custom" ? authConfig?.apiBaseUrl ?? "" : "",
+                        apiBaseUrl: value === "custom" ? (authConfig?.apiBaseUrl ?? "") : "",
                       });
                     }}
                   />
@@ -580,14 +554,18 @@ export function SettingsPage() {
               <Col xs={24}>
                 <Form.Item
                   noStyle
-                  shouldUpdate={(prevValues, nextValues) => prevValues.provider !== nextValues.provider}
+                  shouldUpdate={(prevValues, nextValues) =>
+                    prevValues.provider !== nextValues.provider
+                  }
                 >
                   {({ getFieldValue }) =>
                     getFieldValue("provider") === "custom" ? (
                       <Form.Item
                         label="API Base URL"
                         name="apiBaseUrl"
-                        rules={[{ required: true, message: "请输入 Custom Provider 的 API Base URL" }]}
+                        rules={[
+                          { required: true, message: "请输入 Custom Provider 的 API Base URL" },
+                        ]}
                       >
                         <Input placeholder="https://bobdong.cn/v1" />
                       </Form.Item>
@@ -602,32 +580,7 @@ export function SettingsPage() {
               </Col>
             </Row>
             <Flex gap={8} wrap>
-              <Button
-                type="primary"
-                loading={loading}
-                onClick={() =>
-                  void (async () => {
-                    setLoading(true);
-                    try {
-                      const values = await authForm.validateFields();
-                      const saved = await saveOpenClawAuthConfig(values);
-                      setAuthConfig(saved);
-                      authForm.setFieldsValue({
-                        provider: saved.provider,
-                        model: saved.model,
-                        apiKey: "",
-                        apiBaseUrl: saved.apiBaseUrl ?? "",
-                      });
-                      form.setFieldValue("model", saved.model);
-                      message.success("模型与授权已保存到内置 OpenClaw");
-                    } catch (error) {
-                      message.error(`保存授权配置失败: ${String(error)}`);
-                    } finally {
-                      setLoading(false);
-                    }
-                  })()
-                }
-              >
+              <Button type="primary" loading={loading} onClick={() => void saveAuth()}>
                 保存模型与授权
               </Button>
             </Flex>
@@ -648,88 +601,207 @@ export function SettingsPage() {
         </Flex>
       </Card>
 
-      <Card title="Control UI">
-        <Flex vertical gap={16}>
-          <Alert
-            type="info"
-            showIcon
-            message="遇到 gateway token missing 时这样处理"
-            description="先打开 Dashboard URL，再把页面里提供的 gateway token 粘贴到 Control UI settings。模型 API Key 不能填在这里。"
-          />
+      <Collapse
+        className={styles.advancedPanels}
+        items={[
+          {
+            key: "advanced-config",
+            label: "高级运行配置",
+            children: (
+              <Flex vertical gap={20}>
+                <Paragraph type="secondary" style={{ marginBottom: 0 }}>
+                  只有在你需要覆盖默认端口、启动命令、工作目录或手动排查运行环境时，才需要修改这里的内容。
+                </Paragraph>
 
-          <Paragraph type="secondary">
-            Control UI 的授权依赖 gateway token，不是模型 API key。如果你看到
-            `unauthorized: gateway token missing`，通常说明还没有从 Dashboard URL 获取 token。
-          </Paragraph>
+                <Form form={form} layout="vertical" initialValues={{ enabled: true }}>
+                  <Row gutter={[16, 0]}>
+                    <Col xs={24} md={12}>
+                      <Form.Item label="启用 Runtime" name="enabled" valuePropName="checked">
+                        <Switch />
+                      </Form.Item>
+                    </Col>
+                    <Col xs={24} md={12}>
+                      <Form.Item label="显示名称" name="displayName" rules={[{ required: true }]}>
+                        <Input placeholder="OpenClaw Runtime" />
+                      </Form.Item>
+                    </Col>
+                    <Col xs={24} md={12}>
+                      <Form.Item label="Base URL" name="baseUrl" rules={[{ required: true }]}>
+                        <Input placeholder="http://127.0.0.1:18795" />
+                      </Form.Item>
+                    </Col>
+                    <Col xs={24} md={12}>
+                      <Form.Item
+                        label="健康检查路径"
+                        name="healthPath"
+                        rules={[{ required: true }]}
+                      >
+                        <Input placeholder="/v1/models" />
+                      </Form.Item>
+                    </Col>
+                    <Col xs={24} md={12}>
+                      <Form.Item label="模型" name="model" rules={[{ required: true }]}>
+                        <Input placeholder="anthropic/claude-opus-4-6" />
+                      </Form.Item>
+                    </Col>
+                    <Col xs={24} md={12}>
+                      <Form.Item label="启动命令" name="command" rules={[{ required: true }]}>
+                        <Input placeholder="openclaw" />
+                      </Form.Item>
+                    </Col>
+                    <Col xs={24}>
+                      <Form.Item label="启动参数" name="args">
+                        <Input placeholder="gateway run --allow-unconfigured --port 18795 --force" />
+                      </Form.Item>
+                    </Col>
+                    <Col xs={24}>
+                      <Form.Item label="工作目录" name="workingDirectory">
+                        <Input placeholder="/path/to/openclaw" />
+                      </Form.Item>
+                    </Col>
+                  </Row>
+                  <Flex gap={8} wrap>
+                    <Button type="primary" loading={loading} onClick={() => void saveConfig()}>
+                      保存并检测
+                    </Button>
+                    <Button loading={loading} onClick={() => void runProbe()}>
+                      只检测
+                    </Button>
+                  </Flex>
+                </Form>
 
-          <Input
-            readOnly
-            value={dashboardUrl}
-            placeholder="先点击“获取 Dashboard URL”或“打开 Control UI”"
-          />
+                <Card title="Control UI" size="small">
+                  <Flex vertical gap={16}>
+                    <Alert
+                      type="info"
+                      showIcon
+                      message="遇到 gateway token missing 时这样处理"
+                      description="先打开 Dashboard URL，再把页面里提供的 gateway token 粘贴到 Control UI settings。模型 API Key 不能填在这里。"
+                    />
 
-          <Flex gap={8} wrap>
-            <Button type="primary" loading={loading} onClick={() => void openDashboard()}>
-              打开 Control UI
-            </Button>
-            <Button loading={loading} onClick={() => void refreshDashboardUrl()}>
-              获取 Dashboard URL
-            </Button>
-            <Button disabled={!dashboardUrl} onClick={() => void copyDashboardUrl()}>
-              复制 Dashboard URL
-            </Button>
-          </Flex>
+                    <Paragraph type="secondary" style={{ marginBottom: 0 }}>
+                      Control UI 的授权依赖 gateway token，不是模型 API key。如果你看到
+                      `unauthorized: gateway token missing`，通常说明还没有从 Dashboard URL 获取
+                      token。
+                    </Paragraph>
 
-          <div className={styles.controlUiSteps}>
-            <Text>1. 点击“打开 Control UI”或复制 Dashboard URL 到浏览器打开。</Text>
-            <Text>2. 从页面拿到 gateway token。</Text>
-            <Text>3. 把 token 粘贴到 Control UI 的 Settings。</Text>
-          </div>
-        </Flex>
-      </Card>
+                    <Input
+                      readOnly
+                      value={dashboardUrl}
+                      placeholder="先点击“获取 Dashboard URL”或“打开 Control UI”"
+                    />
 
-      <Row gutter={[16, 16]}>
-        {runtimeStatus ? (
-          <Col xs={24} xl={12}>
-            <Card title="OpenClaw 检测结果">
-              <Descriptions column={1} size="small">
-                <Descriptions.Item label="Endpoint">{runtimeStatus.endpoint}</Descriptions.Item>
-                <Descriptions.Item label="消息">{runtimeStatus.message}</Descriptions.Item>
-                <Descriptions.Item label="内置 Runtime">
-                  {runtimeStatus.bundled ? "是" : "否"}
-                </Descriptions.Item>
-                <Descriptions.Item label="HTTP 可达">
-                  {runtimeStatus.reachable ? "是" : "否"}
-                </Descriptions.Item>
-                <Descriptions.Item label="HTTP 状态码">
-                  {runtimeStatus.httpStatus ?? "--"}
-                </Descriptions.Item>
-              </Descriptions>
-            </Card>
-          </Col>
-        ) : null}
+                    <Flex gap={8} wrap>
+                      <Button type="primary" loading={loading} onClick={() => void openDashboard()}>
+                        打开 Control UI
+                      </Button>
+                      <Button loading={loading} onClick={() => void refreshDashboardUrl()}>
+                        获取 Dashboard URL
+                      </Button>
+                      <Button disabled={!dashboardUrl} onClick={() => void copyDashboardUrl()}>
+                        复制 Dashboard URL
+                      </Button>
+                    </Flex>
 
-        {runtimeInfo ? (
-          <Col xs={24} xl={12}>
-            <Card title="OpenClaw Runtime 信息">
-              <Descriptions column={1} size="small">
-                <Descriptions.Item label="版本">{runtimeInfo.version}</Descriptions.Item>
-                <Descriptions.Item label="版本读取错误">
-                  {runtimeInfo.versionError ?? "--"}
-                </Descriptions.Item>
-                <Descriptions.Item label="命令路径">{runtimeInfo.commandPath}</Descriptions.Item>
-                <Descriptions.Item label="安装目录">{runtimeInfo.installDir}</Descriptions.Item>
-                <Descriptions.Item label="技能目录">{runtimeInfo.skillsDir}</Descriptions.Item>
-                <Descriptions.Item label="本地 Skills 目录">
-                  {runtimeInfo.localSkillsDirs.length > 0
-                    ? runtimeInfo.localSkillsDirs.join(" ; ")
-                    : "--"}
-                </Descriptions.Item>
-              </Descriptions>
-            </Card>
-          </Col>
-        ) : null}
-      </Row>
+                    <div className={styles.controlUiSteps}>
+                      <Text>1. 点击“打开 Control UI”或复制 Dashboard URL 到浏览器打开。</Text>
+                      <Text>2. 从页面拿到 gateway token。</Text>
+                      <Text>3. 把 token 粘贴到 Control UI 的 Settings。</Text>
+                    </div>
+                  </Flex>
+                </Card>
+              </Flex>
+            ),
+          },
+          {
+            key: "diagnostics",
+            label: "诊断信息",
+            children: (
+              <Flex vertical gap={20}>
+                <Card
+                  title="安装后自检"
+                  size="small"
+                  extra={
+                    <Flex align="center" gap={12}>
+                      <Text type="secondary">
+                        上次检查：{formatCheckTime(selfCheckResult?.checkedAt)}
+                      </Text>
+                      <Button size="small" loading={loading} onClick={() => void runProbe()}>
+                        重新执行自检
+                      </Button>
+                    </Flex>
+                  }
+                >
+                  <Descriptions column={1} size="small">
+                    {selfChecks.map((item) => (
+                      <Descriptions.Item key={item.key} label={item.label}>
+                        <Flex vertical gap={4}>
+                          {getSelfCheckBadge(item.status)}
+                          <Text type="secondary">{item.detail}</Text>
+                          {item.suggestion ? <Text>{item.suggestion}</Text> : null}
+                        </Flex>
+                      </Descriptions.Item>
+                    ))}
+                  </Descriptions>
+                </Card>
+
+                <Row gutter={[16, 16]}>
+                  {runtimeStatus ? (
+                    <Col xs={24} xl={12}>
+                      <Card title="OpenClaw 检测结果" size="small">
+                        <Descriptions column={1} size="small">
+                          <Descriptions.Item label="Endpoint">
+                            {runtimeStatus.endpoint}
+                          </Descriptions.Item>
+                          <Descriptions.Item label="消息">
+                            {runtimeStatus.message}
+                          </Descriptions.Item>
+                          <Descriptions.Item label="内置 Runtime">
+                            {runtimeStatus.bundled ? "是" : "否"}
+                          </Descriptions.Item>
+                          <Descriptions.Item label="HTTP 可达">
+                            {runtimeStatus.reachable ? "是" : "否"}
+                          </Descriptions.Item>
+                          <Descriptions.Item label="HTTP 状态码">
+                            {runtimeStatus.httpStatus ?? "--"}
+                          </Descriptions.Item>
+                        </Descriptions>
+                      </Card>
+                    </Col>
+                  ) : null}
+
+                  {runtimeInfo ? (
+                    <Col xs={24} xl={12}>
+                      <Card title="OpenClaw Runtime 信息" size="small">
+                        <Descriptions column={1} size="small">
+                          <Descriptions.Item label="版本">{runtimeInfo.version}</Descriptions.Item>
+                          <Descriptions.Item label="版本读取错误">
+                            {runtimeInfo.versionError ?? "--"}
+                          </Descriptions.Item>
+                          <Descriptions.Item label="命令路径">
+                            {runtimeInfo.commandPath}
+                          </Descriptions.Item>
+                          <Descriptions.Item label="安装目录">
+                            {runtimeInfo.installDir}
+                          </Descriptions.Item>
+                          <Descriptions.Item label="技能目录">
+                            {runtimeInfo.skillsDir}
+                          </Descriptions.Item>
+                          <Descriptions.Item label="本地 Skills 目录">
+                            {runtimeInfo.localSkillsDirs.length > 0
+                              ? runtimeInfo.localSkillsDirs.join(" ; ")
+                              : "--"}
+                          </Descriptions.Item>
+                        </Descriptions>
+                      </Card>
+                    </Col>
+                  ) : null}
+                </Row>
+              </Flex>
+            ),
+          },
+        ]}
+      />
     </Flex>
   );
 }

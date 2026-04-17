@@ -1,4 +1,16 @@
-import { Button, Card, Col, Flex, Input, List, Row, Statistic, Tag, Typography, message } from "antd";
+import {
+  Button,
+  Card,
+  Col,
+  Flex,
+  Input,
+  List,
+  Row,
+  Statistic,
+  Tag,
+  Typography,
+  message,
+} from "antd";
 import { useState } from "react";
 import { useNavigate } from "react-router";
 import {
@@ -84,13 +96,6 @@ export function SkillsPage() {
             <div className={styles.marketStatChip}>当前可用 {readySkillIds.length}</div>
           </div>
         </div>
-        <div className={styles.marketFeatureBand}>
-          <div>
-            <Text type="secondary">能力来源</Text>
-            <div className={styles.featureBandTitle}>本地目录 / Runtime 识别 / 私有技能</div>
-          </div>
-          <Text type="secondary">页面只展示真实存在的技能，不再混入预置演示数据。</Text>
-        </div>
       </Card>
 
       <Row gutter={[16, 16]}>
@@ -131,9 +136,7 @@ export function SkillsPage() {
                 >
                   选择目录导入
                 </Button>
-                <Button onClick={() => navigate(ROUTE_PATHS.settings)}>
-                  管理本地 Skills 目录
-                </Button>
+                <Button onClick={() => navigate(ROUTE_PATHS.settings)}>管理本地 Skills 目录</Button>
               </Flex>
             </div>
 
@@ -185,13 +188,10 @@ export function SkillsPage() {
                   </Button>,
                 ]}
               >
-                <List.Item.Meta
-                  title={skill.name}
-                  description={skill.description}
-                />
+                <List.Item.Meta title={skill.name} description={skill.description} />
                 <Flex gap={8} wrap justify="end">
                   <Tag color={installedSkillIds.includes(skill.name) ? "blue" : "purple"}>
-                    {installedSkillIds.includes(skill.name) ? "本地已安装" : "Runtime 识别"}
+                    {installedSkillIds.includes(skill.name) ? "本地已安装" : "自动识别"}
                   </Tag>
                   <Tag color={skill.eligible ? "blue" : "orange"}>
                     {skill.eligible ? "可直接调用" : "已识别"}

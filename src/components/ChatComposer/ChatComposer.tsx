@@ -10,6 +10,18 @@ const { Text } = Typography;
 const buildSkillPrompt = (messageContent: string, skill: InstalledSkillRecord) =>
   `请优先使用技能「${skill.name}」（ID: ${skill.id}）处理下面这个请求；如果该技能不适用，请明确说明并继续完成任务。\n\n${messageContent}`;
 
+const isImeConfirmEvent = (event: React.KeyboardEvent) => {
+  const nativeEvent = event.nativeEvent as KeyboardEvent & {
+    isComposing?: boolean;
+    keyCode?: number;
+    which?: number;
+  };
+
+  return (
+    nativeEvent.isComposing === true || nativeEvent.keyCode === 229 || nativeEvent.which === 229
+  );
+};
+
 export const ChatComposer = () => {
   const runtimeStatus = useRuntimeStore((state) => state.runtimeStatus);
   const streamingRunning = useChatStore((state) => state.streamingRunning);
@@ -35,6 +47,14 @@ export const ChatComposer = () => {
   const senderPlaceholder = selectedSkill
     ? `直接描述目标、限制条件或想调用的技能。当前优先调用 ${selectedSkill.name}`
     : "直接描述目标、限制条件或想调用的技能";
+
+  const restoreComposerCursor = () => {
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        senderRef.current?.focus({ cursor: "end", preventScroll: true });
+      });
+    });
+  };
 
   const handleSubmit = (messageContent: string) => {
     const nextValue = messageContent || inputValueRef.current;
@@ -67,13 +87,9 @@ export const ChatComposer = () => {
       <div className={styles.senderMetaBar}>
         <div className={styles.senderMetaGroup}>
           <Text className={styles.senderLabel}>Mode</Text>
-          <Tag className={styles.senderTag}>
-            {streamingRunning ? "Running" : "Ready"}
-          </Tag>
+          <Tag className={styles.senderTag}>{streamingRunning ? "Running" : "Ready"}</Tag>
           {selectedSkill ? (
-            <Tag className={styles.senderTagAccent}>
-              Skill · {selectedSkill.name}
-            </Tag>
+            <Tag className={styles.senderTagAccent}>Skill · {selectedSkill.name}</Tag>
           ) : null}
         </div>
       </div>
@@ -86,6 +102,13 @@ export const ChatComposer = () => {
           setSelectedSkillId(typeof skill?.value === "string" ? skill.value : null);
         }}
         onSubmit={handleSubmit}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" && isImeConfirmEvent(event)) {
+            return false;
+          }
+
+          return undefined;
+        }}
         loading={senderLoading}
         onCancel={() => void handleCancel()}
         submitType="enter"
@@ -101,6 +124,7 @@ export const ChatComposer = () => {
                   onClose: (event) => {
                     event.stopPropagation();
                     setSelectedSkillId(null);
+                    restoreComposerCursor();
                   },
                 },
               }
@@ -114,7 +138,10 @@ export const ChatComposer = () => {
                 className={styles.control}
                 value={selectedSkillId ?? undefined}
                 options={readySkillOptions}
-                onChange={(value) => setSelectedSkillId(value)}
+                onChange={(value) => {
+                  setSelectedSkillId(value);
+                  restoreComposerCursor();
+                }}
                 placeholder="选择技能（可选）"
                 disabled={streamingRunning || readySkillOptions.length === 0}
               />
@@ -123,7 +150,11 @@ export const ChatComposer = () => {
               <Text className={styles.footerTip}>Enter 发送</Text>
               <Text className={styles.footerTip}>Shift + Enter 换行</Text>
               {streamingRunning ? (
-                <Button size="small" onClick={() => void handleCancel()} loading={streamingStopping}>
+                <Button
+                  size="small"
+                  onClick={() => void handleCancel()}
+                  loading={streamingStopping}
+                >
                   停止
                 </Button>
               ) : null}

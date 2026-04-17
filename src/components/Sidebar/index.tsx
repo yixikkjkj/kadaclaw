@@ -1,7 +1,6 @@
 import {
   AppstoreOutlined,
   DeleteOutlined,
-  MenuUnfoldOutlined,
   MessageOutlined,
   PlusOutlined,
   SettingOutlined,
@@ -11,7 +10,7 @@ import dayjs from "dayjs";
 import { useLocation, useNavigate } from "react-router";
 import { ROUTE_PATHS } from "~/common/constants";
 import styles from "./index.css";
-import { useChatStore, useLayoutStore } from "~/store";
+import { useChatStore } from "~/store";
 
 const { Sider } = Layout;
 const { Text } = Typography;
@@ -33,8 +32,7 @@ const buildChatMenuItem = (
         description="本地保存的该会话记录会一并删除。"
         okText="删除"
         cancelText="取消"
-        onConfirm={(event) => {
-          event?.stopPropagation();
+        onConfirm={() => {
           onDelete(sessionId);
         }}
       >
@@ -43,6 +41,7 @@ const buildChatMenuItem = (
           icon={<DeleteOutlined />}
           size="small"
           type="text"
+          onClick={(event) => event.stopPropagation()}
         />
       </Popconfirm>
     </Flex>
@@ -55,8 +54,6 @@ export const Sidebar = () => {
   const activateSession = useChatStore((state) => state.activateSession);
   const createSession = useChatStore((state) => state.createSession);
   const deleteSession = useChatStore((state) => state.deleteSession);
-  const collapseSidebar = useLayoutStore((state) => state.collapseSidebar);
-  const toggleCollapseSidebar = useLayoutStore((state) => state.toggleCollapseSidebar);
   const location = useLocation();
   const navigate = useNavigate();
   const sortedChatSessions = [...chatSessions].sort(
@@ -178,28 +175,14 @@ export const Sidebar = () => {
   };
 
   return (
-    <Sider
-      className={styles.wrapper}
-      width={240}
-      collapsible
-      collapsed={collapseSidebar}
-      trigger={null}
-    >
-      {collapseSidebar ? null : (
-        <Flex align="center" className={styles.actions} gap={8} justify="end">
-          <Tooltip title="收起侧边栏">
-            <Button
-              size="small"
-              icon={<MenuUnfoldOutlined />}
-              shape="circle"
-              onClick={toggleCollapseSidebar}
-            />
-          </Tooltip>
-          <Tooltip title="新对话">
-            <Button size="small" shape="circle" icon={<PlusOutlined />} onClick={createSession} />
-          </Tooltip>
-        </Flex>
-      )}
+    <Sider className={styles.wrapper} width={240}>
+      <Flex align="center" className={styles.actions} gap={8} justify="end">
+        <Tooltip title="新开对话">
+          <Button size="small" icon={<PlusOutlined />} onClick={createSession}>
+            新开对话
+          </Button>
+        </Tooltip>
+      </Flex>
       <Menu
         className={styles.chatMenuScroll}
         mode="inline"

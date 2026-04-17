@@ -310,6 +310,7 @@ struct InstalledSkillRecord {
   summary: String,
   author: String,
   version: String,
+  enabled: bool,
   manifest_path: String,
   directory: String,
   source_label: String,
@@ -499,10 +500,7 @@ fn set_active_chat_stream(
   Ok(())
 }
 
-fn set_active_chat_stop_requested(
-  state: &ActiveChatProcessState,
-  requested: bool,
-) -> Result<(), String> {
+fn set_active_chat_stop_requested(state: &ActiveChatProcessState, requested: bool) -> Result<(), String> {
   let mut guard = state
     .stop_requested
     .lock()
@@ -577,7 +575,6 @@ fn terminate_process(pid: u32) -> Result<bool, String> {
   })
 }
 
-
 fn default_openclaw_config_path() -> Result<PathBuf, String> {
   let home = env::var("HOME")
     .or_else(|_| env::var("USERPROFILE"))
@@ -637,10 +634,7 @@ fn ensure_gateway_responses_endpoint_enabled(app: &AppHandle, config: &OpenClawC
   let responses_obj = responses_value
     .as_object_mut()
     .ok_or_else(|| "gateway.http.endpoints.responses 配置无效".to_string())?;
-  let already_enabled = responses_obj
-    .get("enabled")
-    .and_then(Value::as_bool)
-    .unwrap_or(false);
+  let already_enabled = responses_obj.get("enabled").and_then(Value::as_bool).unwrap_or(false);
   if !already_enabled {
     responses_obj.insert("enabled".to_string(), Value::Bool(true));
     changed = true;
@@ -676,21 +670,25 @@ fn read_gateway_bearer_token(app: &AppHandle, config: &OpenClawConfig) -> Result
   }
 
   if mode == "token" {
-    return Ok(auth
-      .get("token")
-      .and_then(Value::as_str)
-      .map(str::trim)
-      .filter(|value| !value.is_empty())
-      .map(ToString::to_string));
+    return Ok(
+      auth
+        .get("token")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToString::to_string),
+    );
   }
 
   if mode == "password" {
-    return Ok(auth
-      .get("password")
-      .and_then(Value::as_str)
-      .map(str::trim)
-      .filter(|value| !value.is_empty())
-      .map(ToString::to_string));
+    return Ok(
+      auth
+        .get("password")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToString::to_string),
+    );
   }
 
   Ok(None)
@@ -783,10 +781,7 @@ fn build_openresponses_stream_snapshot(reply: &str, output_items: &[Value]) -> V
   })
 }
 
-fn resolve_openresponses_stream_event_type(
-  payload: &Value,
-  event_type_hint: Option<&str>,
-) -> String {
+fn resolve_openresponses_stream_event_type(payload: &Value, event_type_hint: Option<&str>) -> String {
   payload
     .get("type")
     .and_then(Value::as_str)
@@ -898,7 +893,6 @@ fn build_openclaw_command(command_path: &str) -> Command {
 fn build_openclaw_command(command_path: &str) -> Command {
   Command::new(command_path)
 }
-
 
 fn read_config(app: &AppHandle) -> Result<OpenClawConfig, String> {
   let path = config_path(app)?;
@@ -1223,11 +1217,7 @@ fn is_skill_directory(path: &Path) -> bool {
 }
 
 fn find_workspace_skills_dir(start: &Path) -> Option<PathBuf> {
-  let mut current = if start.is_dir() {
-    start.to_path_buf()
-  } else {
-    start.parent()?.to_path_buf()
-  };
+  let mut current = if start.is_dir() { start.to_path_buf() } else { start.parent()?.to_path_buf() };
 
   loop {
     let candidate = current.join("skills");
@@ -1527,11 +1517,7 @@ fn save_openclaw_auth_config_impl(
   let api_key_env_name = provider_env_name(&provider)
     .ok_or_else(|| "暂不支持该 Provider".to_string())?
     .to_string();
-  let existing_minimax_api_key = if provider == "minimax" {
-    read_minimax_provider_api_key(&root)
-  } else {
-    None
-  };
+  let existing_minimax_api_key = if provider == "minimax" { read_minimax_provider_api_key(&root) } else { None };
 
   let root_obj = root.as_object_mut().ok_or_else(|| "配置文件对象无效".to_string())?;
 
@@ -1602,10 +1588,7 @@ fn save_openclaw_auth_config_impl(
     } else if let Some(saved_api_key) = saved_env_api_key.clone() {
       minimax_obj.insert("apiKey".to_string(), Value::String(saved_api_key));
     }
-    minimax_obj.insert(
-      "models".to_string(),
-      Value::Array(vec![build_minimax_model_entry(&model)]),
-    );
+    minimax_obj.insert("models".to_string(), Value::Array(vec![build_minimax_model_entry(&model)]));
 
     let plugins_value = root_obj.entry("plugins".to_string()).or_insert_with(|| json!({}));
     if !plugins_value.is_object() {
@@ -1621,9 +1604,7 @@ fn save_openclaw_auth_config_impl(
     let entries_obj = entries_value
       .as_object_mut()
       .ok_or_else(|| "plugins.entries 配置无效".to_string())?;
-    let minimax_plugin_value = entries_obj
-      .entry("minimax".to_string())
-      .or_insert_with(|| json!({}));
+    let minimax_plugin_value = entries_obj.entry("minimax".to_string()).or_insert_with(|| json!({}));
     if !minimax_plugin_value.is_object() {
       *minimax_plugin_value = json!({});
     }
@@ -1689,6 +1670,56 @@ fn skill_manifest_path(app: &AppHandle, skill_id: &str) -> Result<PathBuf, Strin
   Ok(skills_dir.join(skill_dir_name(skill_id)).join("skill.json"))
 }
 
+fn read_skill_enabled_state(app: &AppHandle, skill_id: &str) -> Result<bool, String> {
+  let path = runtime_config_path(&bundled_prefix(app)?);
+  let root = ensure_runtime_config_object(&path)?;
+
+  Ok(
+    root
+      .get("skills")
+      .and_then(|value| value.get("entries"))
+      .and_then(|value| value.get(skill_id))
+      .and_then(|value| value.get("enabled"))
+      .and_then(Value::as_bool)
+      .unwrap_or(true),
+  )
+}
+
+fn write_skill_enabled_state(app: &AppHandle, skill_id: &str, enabled: bool) -> Result<bool, String> {
+  let path = runtime_config_path(&bundled_prefix(app)?);
+  let mut root = ensure_runtime_config_object(&path)?;
+  let root_obj = root.as_object_mut().ok_or_else(|| "runtime 配置对象无效".to_string())?;
+
+  let skills_value = root_obj.entry("skills".to_string()).or_insert_with(|| json!({}));
+  if !skills_value.is_object() {
+    *skills_value = json!({});
+  }
+  let skills_obj = skills_value
+    .as_object_mut()
+    .ok_or_else(|| "skills 配置无效".to_string())?;
+
+  let entries_value = skills_obj.entry("entries".to_string()).or_insert_with(|| json!({}));
+  if !entries_value.is_object() {
+    *entries_value = json!({});
+  }
+  let entries_obj = entries_value
+    .as_object_mut()
+    .ok_or_else(|| "skills.entries 配置无效".to_string())?;
+
+  let skill_value = entries_obj.entry(skill_id.to_string()).or_insert_with(|| json!({}));
+  if !skill_value.is_object() {
+    *skill_value = json!({});
+  }
+  let skill_obj = skill_value
+    .as_object_mut()
+    .ok_or_else(|| "skills.entries.<id> 配置无效".to_string())?;
+
+  skill_obj.insert("enabled".to_string(), Value::Bool(enabled));
+
+  write_runtime_config_value(&path, &root)?;
+  Ok(true)
+}
+
 fn read_skill_manifest(manifest_path: &Path) -> Result<SkillManifest, String> {
   let content = fs::read_to_string(manifest_path)
     .map_err(|error| format!("无法读取技能清单 {}: {error}", manifest_path.display()))?;
@@ -1711,6 +1742,7 @@ fn read_skill_manifest_from_dir(skill_dir: &Path) -> Result<SkillManifest, Strin
 fn build_installed_skill_record(
   skill_dir: &Path,
   manifest: &SkillManifest,
+  enabled: bool,
   source_label: &str,
   source_type: &str,
   removable: bool,
@@ -1722,6 +1754,7 @@ fn build_installed_skill_record(
     summary: manifest.summary.clone(),
     author: manifest.author.clone(),
     version: manifest.version.clone(),
+    enabled,
     manifest_path: skill_dir.join("skill.json").to_string_lossy().to_string(),
     directory: skill_dir.to_string_lossy().to_string(),
     source_label: source_label.to_string(),
@@ -1733,8 +1766,7 @@ fn build_installed_skill_record(
 fn copy_directory_recursive(source_dir: &Path, target_dir: &Path) -> Result<(), String> {
   fs::create_dir_all(target_dir).map_err(|error| format!("无法创建目录 {}: {error}", target_dir.display()))?;
 
-  let entries = fs::read_dir(source_dir)
-    .map_err(|error| format!("无法读取目录 {}: {error}", source_dir.display()))?;
+  let entries = fs::read_dir(source_dir).map_err(|error| format!("无法读取目录 {}: {error}", source_dir.display()))?;
 
   for entry in entries {
     let entry = entry.map_err(|error| format!("读取目录条目失败: {error}"))?;
@@ -1745,13 +1777,8 @@ fn copy_directory_recursive(source_dir: &Path, target_dir: &Path) -> Result<(), 
       copy_directory_recursive(&source_path, &target_path)?;
     } else {
       ensure_parent_dir(&target_path)?;
-      fs::copy(&source_path, &target_path).map_err(|error| {
-        format!(
-          "无法复制文件 {} -> {}: {error}",
-          source_path.display(),
-          target_path.display()
-        )
-      })?;
+      fs::copy(&source_path, &target_path)
+        .map_err(|error| format!("无法复制文件 {} -> {}: {error}", source_path.display(), target_path.display()))?;
     }
   }
 
@@ -1769,8 +1796,7 @@ fn create_temp_subdir(prefix: &str) -> Result<PathBuf, String> {
 }
 
 fn extract_zip_bytes_to_dir(bytes: &[u8], target_dir: &Path) -> Result<(), String> {
-  let mut archive = zip::ZipArchive::new(Cursor::new(bytes))
-    .map_err(|error| format!("无法解析技能压缩包: {error}"))?;
+  let mut archive = zip::ZipArchive::new(Cursor::new(bytes)).map_err(|error| format!("无法解析技能压缩包: {error}"))?;
 
   for index in 0..archive.len() {
     let mut entry = archive
@@ -1788,8 +1814,8 @@ fn extract_zip_bytes_to_dir(bytes: &[u8], target_dir: &Path) -> Result<(), Strin
     }
 
     ensure_parent_dir(&output_path)?;
-    let mut output_file = fs::File::create(&output_path)
-      .map_err(|error| format!("无法写入解压文件 {}: {error}", output_path.display()))?;
+    let mut output_file =
+      fs::File::create(&output_path).map_err(|error| format!("无法写入解压文件 {}: {error}", output_path.display()))?;
     std::io::copy(&mut entry, &mut output_file)
       .map_err(|error| format!("无法解压文件 {}: {error}", output_path.display()))?;
   }
@@ -1821,18 +1847,13 @@ fn install_managed_skill_from_directory(app: &AppHandle, source_dir: &Path) -> R
   sync_openclaw_skills_extra_dir(app)?;
   let manifest = read_skill_manifest_from_dir(source_dir)?;
   let target_dir = skills_dir_for_app(app)?.join(skill_dir_name(&manifest.id));
+  let enabled = read_skill_enabled_state(app, &manifest.id)?;
 
-  let source_canonical = fs::canonicalize(source_dir)
-    .map_err(|error| format!("无法解析技能目录 {}: {error}", source_dir.display()))?;
+  let source_canonical =
+    fs::canonicalize(source_dir).map_err(|error| format!("无法解析技能目录 {}: {error}", source_dir.display()))?;
   let target_canonical = fs::canonicalize(&target_dir).ok();
   if target_canonical.as_ref() == Some(&source_canonical) {
-    return Ok(build_installed_skill_record(
-      &target_dir,
-      &manifest,
-      "应用托管",
-      "bundled",
-      true,
-    ));
+    return Ok(build_installed_skill_record(&target_dir, &manifest, enabled, "应用托管", "bundled", true));
   }
 
   if target_dir.exists() {
@@ -1843,16 +1864,13 @@ fn install_managed_skill_from_directory(app: &AppHandle, source_dir: &Path) -> R
   copy_directory_recursive(source_dir, &target_dir)?;
   let installed_manifest = read_skill_manifest_from_dir(&target_dir)?;
 
-  Ok(build_installed_skill_record(
-    &target_dir,
-    &installed_manifest,
-    "应用托管",
-    "bundled",
-    true,
-  ))
+  Ok(build_installed_skill_record(&target_dir, &installed_manifest, enabled, "应用托管", "bundled", true))
 }
 
-async fn install_skill_from_url_impl(app: &AppHandle, payload: InstallSkillFromUrlPayload) -> Result<InstalledSkillRecord, String> {
+async fn install_skill_from_url_impl(
+  app: &AppHandle,
+  payload: InstallSkillFromUrlPayload,
+) -> Result<InstalledSkillRecord, String> {
   let url = payload.url.trim().to_string();
   if url.is_empty() {
     return Err("技能链接不能为空".to_string());
@@ -1940,7 +1958,9 @@ fn gateway_listener_detected(base_url: &str) -> bool {
     return false;
   };
 
-  addresses.into_iter().any(|address| TcpStream::connect_timeout(&address, Duration::from_millis(400)).is_ok())
+  addresses
+    .into_iter()
+    .any(|address| TcpStream::connect_timeout(&address, Duration::from_millis(400)).is_ok())
 }
 
 fn configured_gateway_detected(config: &OpenClawConfig) -> bool {
@@ -2113,12 +2133,13 @@ fn list_installed_skill_records(app: &AppHandle) -> Result<Vec<InstalledSkillRec
       }
 
       let manifest = read_skill_manifest(&manifest_path)?;
+      let enabled = read_skill_enabled_state(app, &manifest.id)?;
 
       if !seen_ids.insert(manifest.id.clone()) {
         continue;
       }
 
-      records.push(build_installed_skill_record(&path, &manifest, &source_label, &source_type, removable));
+      records.push(build_installed_skill_record(&path, &manifest, enabled, &source_label, &source_type, removable));
     }
   }
 
@@ -2267,7 +2288,8 @@ async fn launch_openclaw_runtime(app: AppHandle) -> Result<OpenClawStatus, Strin
     spawn_runtime_process(&config)?;
   }
 
-  let mut status = wait_for_runtime_ready(&app, &config, Duration::from_secs(OPENCLAW_RUNTIME_READY_TIMEOUT_SECS)).await;
+  let mut status =
+    wait_for_runtime_ready(&app, &config, Duration::from_secs(OPENCLAW_RUNTIME_READY_TIMEOUT_SECS)).await;
   if !status.reachable && gateway_detected && executable_exists(&config.command) {
     spawn_runtime_process(&config)?;
     status = wait_for_runtime_ready(&app, &config, Duration::from_secs(OPENCLAW_RUNTIME_READY_TIMEOUT_SECS)).await;
@@ -2357,7 +2379,8 @@ async fn ensure_openclaw_runtime(app: AppHandle) -> Result<OpenClawStatus, Strin
     .map_err(|error| format!("自动启动任务失败: {error}"))??;
   }
 
-  let mut status = wait_for_runtime_ready(&app, &config, Duration::from_secs(OPENCLAW_RUNTIME_READY_TIMEOUT_SECS)).await;
+  let mut status =
+    wait_for_runtime_ready(&app, &config, Duration::from_secs(OPENCLAW_RUNTIME_READY_TIMEOUT_SECS)).await;
   if !status.reachable && gateway_detected {
     let config_clone = config.clone();
     tauri::async_runtime::spawn_blocking(move || -> Result<(), String> {
@@ -2483,16 +2506,12 @@ async fn send_openclaw_message(
     request = request.bearer_auth(token);
   }
 
-  let mut response = request
-    .send()
-    .await
-    .map_err(|error| {
-      format!(
-        "调用 OpenClaw gateway responses 失败: {error}。请求地址: {}。健康检查地址: {}",
-        endpoint,
-        status.endpoint,
-      )
-    })?;
+  let mut response = request.send().await.map_err(|error| {
+    format!(
+      "调用 OpenClaw gateway responses 失败: {error}。请求地址: {}。健康检查地址: {}",
+      endpoint, status.endpoint,
+    )
+  })?;
 
   let response_status = response.status();
 
@@ -2588,10 +2607,9 @@ async fn send_openclaw_message(
             .filter(|value| !value.is_empty())
             .map(ToString::to_string)
             .or_else(|| {
-              payload
-                .get("error")
-                .and_then(Value::as_object)
-                .map(|error| serde_json::to_string(error).unwrap_or_else(|_| "OpenClaw gateway responses 流执行失败".to_string()))
+              payload.get("error").and_then(Value::as_object).map(|error| {
+                serde_json::to_string(error).unwrap_or_else(|_| "OpenClaw gateway responses 流执行失败".to_string())
+              })
             })
             .unwrap_or_else(|| {
               serde_json::to_string(&payload).unwrap_or_else(|_| "OpenClaw gateway responses 流执行失败".to_string())
@@ -2625,11 +2643,7 @@ async fn send_openclaw_message(
 
   let raw_output = response_json.unwrap_or_else(|| build_openresponses_stream_snapshot(&reply, &output_items));
 
-  Ok(OpenClawChatResponse {
-    session_id,
-    reply,
-    raw_output,
-  })
+  Ok(OpenClawChatResponse { session_id, reply, raw_output })
 }
 
 #[tauri::command]
@@ -3073,6 +3087,22 @@ fn remove_skill(app: AppHandle, skill_id: String) -> Result<bool, String> {
 }
 
 #[tauri::command]
+fn set_skill_enabled(app: AppHandle, skill_id: String, enabled: bool) -> Result<bool, String> {
+  let normalized_skill_id = skill_id.trim();
+  if normalized_skill_id.is_empty() {
+    return Err("技能 ID 不能为空".to_string());
+  }
+
+  sync_openclaw_skills_extra_dir(&app)?;
+  let installed_skills = list_installed_skill_records(&app)?;
+  if !installed_skills.iter().any(|skill| skill.id == normalized_skill_id) {
+    return Err(format!("未找到已安装技能：{normalized_skill_id}"));
+  }
+
+  write_skill_enabled_state(&app, normalized_skill_id, enabled)
+}
+
+#[tauri::command]
 fn install_skill_from_directory(
   app: AppHandle,
   payload: InstallSkillFromDirectoryPayload,
@@ -3125,6 +3155,7 @@ pub fn run() {
       list_installed_skills,
       list_recognized_skills,
       remove_skill,
+      set_skill_enabled,
       install_skill_from_directory,
       install_skill_from_url,
       install_bundled_openclaw_runtime,

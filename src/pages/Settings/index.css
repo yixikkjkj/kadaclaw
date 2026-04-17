@@ -52,8 +52,32 @@
   gap: 6px;
 }
 
+.readinessGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.readinessCard {
+  padding: 18px;
+  border-radius: 18px;
+  border: 1px solid rgba(15, 123, 108, 0.12);
+  background: rgba(15, 123, 108, 0.03);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.advancedPanels {
+  background: transparent;
+}
+
 @media (max-width: 992px) {
   .settingsHeroGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .readinessGrid {
     grid-template-columns: 1fr;
   }
 }

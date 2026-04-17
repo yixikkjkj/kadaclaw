@@ -12,6 +12,7 @@ export const buildPlatformExtractorBundle = (platform, openUrl) => {
     browserSteps: [
       {
         action: "navigate",
+        kind: "navigate",
         url: openUrl,
       },
     ],

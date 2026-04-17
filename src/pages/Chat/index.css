@@ -143,7 +143,7 @@
 }
 
 .userGroup .chatBubble {
-  background: linear-gradient(180deg, #eff7f3 0%, #e8f1ed 100%);
+  background: #e8f1ed;
   border-color: rgba(31, 92, 80, 0.08);
 }
 
@@ -170,7 +170,7 @@
   content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(135deg, rgba(25, 112, 93, 0.05), transparent 36%);
+  background: rgba(25, 112, 93, 0.04);
   pointer-events: none;
 }
 

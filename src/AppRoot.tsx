@@ -17,6 +17,34 @@ import { useChatStore, useRuntimeStore, useSkillStore } from "~/store";
 import { type ChatJsonValue } from "~/types";
 
 const RUNTIME_BOOTSTRAP_TIMEOUT_MS = 120000;
+const ONBOARDING_STORAGE_KEY = "kadaclaw:onboarding-completed:v1";
+
+const readOnboardingCompleted = () => {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  try {
+    return window.localStorage.getItem(ONBOARDING_STORAGE_KEY) === "true";
+  } catch {
+    return false;
+  }
+};
+
+const writeOnboardingCompleted = (value: boolean) => {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    if (value) {
+      window.localStorage.setItem(ONBOARDING_STORAGE_KEY, "true");
+      return;
+    }
+
+    window.localStorage.removeItem(ONBOARDING_STORAGE_KEY);
+  } catch {}
+};
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string) {
   return new Promise<T>((resolve, reject) => {
@@ -38,6 +66,9 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string)
 
 export const AppRoot = () => {
   const setRuntimeState = useRuntimeStore((state) => state.setRuntimeState);
+  const authConfig = useRuntimeStore((state) => state.authConfig);
+  const authConfigLoaded = useRuntimeStore((state) => state.authConfigLoaded);
+  const refreshAuthConfig = useRuntimeStore((state) => state.refreshAuthConfig);
   const refreshInstalledSkills = useSkillStore((state) => state.refreshInstalledSkills);
   const hydrateChatHistory = useChatStore((state) => state.hydrateChatHistory);
   const hydrateActiveStream = useChatStore((state) => state.hydrateActiveStream);
@@ -47,6 +78,9 @@ export const AppRoot = () => {
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [onboardingLoading, setOnboardingLoading] = useState(false);
   const [runtimeInstallDir, setRuntimeInstallDir] = useState<string | null>(null);
+  const [runtimeReachable, setRuntimeReachable] = useState(false);
+  const [onboardingCompleted, setOnboardingCompleted] = useState(readOnboardingCompleted);
+  const [onboardingDeferredForSession, setOnboardingDeferredForSession] = useState(false);
   const bootstrapStartedRef = useRef(false);
   const refreshPromiseRef = useRef<Promise<unknown> | null>(null);
 
@@ -87,18 +121,18 @@ export const AppRoot = () => {
           RUNTIME_BOOTSTRAP_TIMEOUT_MS,
           "检测 OpenClaw runtime 超时，请先进入高级配置页手动检查当前 runtime 状态。",
         );
+        setRuntimeReachable(status.reachable);
         setRuntimeState(status.reachable ? "ready" : "error", status.message);
-        setShowOnboarding(!status.reachable);
         setBootstrapping(false);
         void syncSkills(status.reachable, status.message);
 
         return status;
       } catch (reason) {
+        setRuntimeReachable(false);
         setRuntimeState(
           "error",
           getErrorMessage(reason, "尚未检测到 OpenClaw runtime，请完成首次安装"),
         );
-        setShowOnboarding(true);
         setBootstrapping(false);
         return null;
       } finally {
@@ -186,8 +220,29 @@ export const AppRoot = () => {
     }
     bootstrapStartedRef.current = true;
     void refreshRuntimeInfo();
+    void refreshAuthConfig();
     void refreshRuntime();
-  }, [refreshInstalledSkills, setRuntimeState]);
+  }, [refreshAuthConfig, refreshInstalledSkills, setRuntimeState]);
+
+  useEffect(() => {
+    if (bootstrapping || !authConfigLoaded) {
+      return;
+    }
+
+    if (onboardingCompleted || onboardingDeferredForSession) {
+      setShowOnboarding(false);
+      return;
+    }
+
+    setShowOnboarding(true);
+  }, [
+    authConfig,
+    authConfigLoaded,
+    bootstrapping,
+    onboardingCompleted,
+    onboardingDeferredForSession,
+    runtimeReachable,
+  ]);
 
   const runOnboardingInstall = async () => {
     if (onboardingLoading) {
@@ -199,6 +254,7 @@ export const AppRoot = () => {
       await installBundledOpenClawRuntime();
       setRuntimeState("checking", "OpenClaw 已安装，正在启动 runtime");
       await launchOpenClawRuntime();
+      setOnboardingDeferredForSession(false);
       await refreshRuntime();
     } catch (reason) {
       setRuntimeState("error", `安装或启动失败：${getErrorMessage(reason, "未知错误")}`);
@@ -216,6 +272,7 @@ export const AppRoot = () => {
     setRuntimeState("checking", "正在启动 OpenClaw runtime");
     try {
       await launchOpenClawRuntime();
+      setOnboardingDeferredForSession(false);
       await refreshRuntime();
     } catch (reason) {
       setRuntimeState("error", `启动失败：${getErrorMessage(reason, "未知错误")}`);
@@ -223,6 +280,17 @@ export const AppRoot = () => {
     } finally {
       setOnboardingLoading(false);
     }
+  };
+
+  const completeOnboarding = () => {
+    writeOnboardingCompleted(true);
+    setOnboardingCompleted(true);
+    setShowOnboarding(false);
+  };
+
+  const deferOnboarding = () => {
+    setOnboardingDeferredForSession(true);
+    setShowOnboarding(false);
   };
 
   const shouldRenderRouter = !bootstrapping || showOnboarding;
@@ -233,11 +301,22 @@ export const AppRoot = () => {
       {bootstrapping ? <BootstrappingScreen /> : null}
       <OnboardingModal
         open={showOnboarding}
+        runtimeReachable={runtimeReachable}
+        authConfigured={Boolean(authConfig?.apiKeyConfigured)}
         installDir={runtimeInstallDir}
         loading={onboardingLoading}
         onInstall={runOnboardingInstall}
         onStart={runOnboardingStart}
-        onAdvanced={() => void router.navigate(ROUTE_PATHS.settings)}
+        onFinish={completeOnboarding}
+        onSkip={deferOnboarding}
+        onAdvanced={() => {
+          deferOnboarding();
+          void router.navigate(ROUTE_PATHS.settings);
+        }}
+        onOpenWorkspace={() => {
+          completeOnboarding();
+          void router.navigate(ROUTE_PATHS.chat);
+        }}
       />
     </>
   );

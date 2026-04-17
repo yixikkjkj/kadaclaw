@@ -1,3 +1,16 @@
 .innerCard {
   height: 100%;
 }
+
+.steps {
+  margin-bottom: 4px;
+}
+
+.sectionTitle {
+  margin: 0 !important;
+}
+
+.footerRow {
+  padding-top: 4px;
+  border-top: 1px solid rgba(5, 5, 5, 0.06);
+}

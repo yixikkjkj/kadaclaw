@@ -6,9 +6,9 @@
   border-radius: 14px;
   color: #fdfaf4;
   font-weight: 700;
-  background: linear-gradient(135deg, #0f7b6c 0%, #2f6955 100%);
+  background: #2f6955;
 }
 
 .featuredAvatar {
-  background: linear-gradient(135deg, #d98a32 0%, #0f7b6c 100%);
+  background: #0f7b6c;
 }

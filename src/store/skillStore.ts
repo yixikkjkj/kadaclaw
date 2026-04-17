@@ -4,6 +4,7 @@ import {
   listInstalledSkills,
   listRecognizedSkills,
   removeSkill,
+  setSkillEnabled,
   type InstalledSkillRecord,
   type RecognizedSkillRecord,
 } from "~/api";
@@ -26,7 +27,7 @@ interface SkillState {
   recognizedSkills: RecognizedSkillRecord[];
   recognizedSkillIds: string[];
   readySkillIds: string[];
-  skillOperations: Record<string, "removing">;
+  skillOperations: Record<string, "removing" | "toggling">;
   skillOperationError: string | null;
   selectedSkillId: string | null;
   skillDrawerOpen: boolean;
@@ -37,6 +38,11 @@ interface SkillState {
     recognized: RecognizedSkillRecord[];
   }>;
   removeInstalledSkill: (skillId: string, skillName: string) => Promise<boolean>;
+  setInstalledSkillEnabled: (
+    skillId: string,
+    skillName: string,
+    enabled: boolean,
+  ) => Promise<boolean>;
 }
 
 export const useSkillStore = create<SkillState>((set, get) => ({
@@ -86,7 +92,8 @@ export const useSkillStore = create<SkillState>((set, get) => ({
 
     const targetSkill = installedSkills.find((skill) => skill.id === skillId);
     if (!targetSkill?.removable) {
-      const errorMessage = "当前技能来自外部本地目录，请直接在原目录中管理，不支持在 Kadaclaw 中删除。";
+      const errorMessage =
+        "当前技能来自外部本地目录，请直接在原目录中管理，不支持在 Kadaclaw 中删除。";
       set({
         skillOperationError: errorMessage,
       });
@@ -108,6 +115,44 @@ export const useSkillStore = create<SkillState>((set, get) => ({
         throw new Error("目标技能不在 Kadaclaw 托管目录中，无法直接删除。");
       }
       message.success(`已卸载技能：${skillName}`);
+      await refreshInstalledSkills();
+      return true;
+    } catch (reason) {
+      const errorMessage = getErrorMessage(reason, "技能操作失败");
+      set({
+        skillOperationError: errorMessage,
+      });
+      message.error(errorMessage);
+      return false;
+    } finally {
+      set((state) => {
+        const nextOperations = { ...state.skillOperations };
+        delete nextOperations[skillId];
+
+        return {
+          skillOperations: nextOperations,
+        };
+      });
+    }
+  },
+  setInstalledSkillEnabled: async (skillId, skillName, enabled) => {
+    const { installedSkillIds, skillOperations, refreshInstalledSkills } = get();
+
+    if (!installedSkillIds.includes(skillId) || skillOperations[skillId]) {
+      return false;
+    }
+
+    set((state) => ({
+      skillOperations: {
+        ...state.skillOperations,
+        [skillId]: "toggling",
+      },
+      skillOperationError: null,
+    }));
+
+    try {
+      await setSkillEnabled(skillId, enabled);
+      message.success(`${enabled ? "已启用" : "已关闭"}技能：${skillName}`);
       await refreshInstalledSkills();
       return true;
     } catch (reason) {

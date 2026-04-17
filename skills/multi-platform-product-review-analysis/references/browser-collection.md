@@ -29,15 +29,20 @@ node skills/multi-platform-product-review-analysis/scripts/build_product_review_
 `browserSteps` 是唯一可信的浏览器执行计划。  
 必须按数组顺序逐步执行，不得跳步，不得把多个步骤手动合并成一个自写脚本。
 
-淘宝当前固定为 4 步：
+淘宝当前不是固定 4 步，而是“短步骤分片注入”：
 
 1. `navigate` 到 `openUrl`
-2. `evaluate fn=<inject function>` 注入采集函数
-3. `evaluate fn=<run function>` 启动采集
-4. `evaluate fn=<result reader function>` 读取结果
+2. `evaluate fn=<init buffer>` 初始化页面内脚本缓存
+3. 多次 `evaluate fn=<append chunk>` 依次写入脚本分片
+4. `evaluate fn=<load extractor>` 把缓存脚本加载到页面上下文
+5. `evaluate fn=<run function>` 启动采集
+6. `evaluate fn=<result reader function>` 读取结果
+
+实际执行时必须以 `browserSteps` 数组为准，不要手写步数。
 
 约束：
 
+- 浏览器工具若要求 `act.kind`，则 `browserSteps` 中的 `kind` 必须原样透传
 - 所有 `evaluate` 都只用 `fn`
 - `fn` 必须是完整函数体字符串，例如 `() => { ... }` 或 `async () => { ... }`
 - 禁止把 `window.runTaobaoReviewCollection()` 这种表达式直接传给 `fn`

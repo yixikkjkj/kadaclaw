@@ -21,6 +21,30 @@ const createSkillSnapshot = (
   readySkillIds: recognizedSkills.filter((record) => record.eligible).map((record) => record.name),
 });
 
+const updateInstalledSkillEnabledState = (
+  installedSkills: InstalledSkillRecord[],
+  recognizedSkills: RecognizedSkillRecord[],
+  skillId: string,
+  enabled: boolean,
+) => ({
+  installedSkills: installedSkills.map((skill) =>
+    skill.id === skillId
+      ? {
+          ...skill,
+          enabled,
+        }
+      : skill,
+  ),
+  recognizedSkills: recognizedSkills.map((record) =>
+    record.name === skillId
+      ? {
+          ...record,
+          disabled: !enabled,
+        }
+      : record,
+  ),
+});
+
 interface SkillState {
   installedSkillIds: string[];
   installedSkills: InstalledSkillRecord[];
@@ -136,13 +160,29 @@ export const useSkillStore = create<SkillState>((set, get) => ({
     }
   },
   setInstalledSkillEnabled: async (skillId, skillName, enabled) => {
-    const { installedSkillIds, skillOperations, refreshInstalledSkills } = get();
+    const {
+      installedSkillIds,
+      installedSkills,
+      recognizedSkills,
+      skillOperations,
+      refreshInstalledSkills,
+    } = get();
 
     if (!installedSkillIds.includes(skillId) || skillOperations[skillId]) {
       return false;
     }
 
+    const previousInstalledSkills = installedSkills;
+    const previousRecognizedSkills = recognizedSkills;
+    const nextState = updateInstalledSkillEnabledState(
+      previousInstalledSkills,
+      previousRecognizedSkills,
+      skillId,
+      enabled,
+    );
+
     set((state) => ({
+      ...createSkillSnapshot(nextState.installedSkills, nextState.recognizedSkills),
       skillOperations: {
         ...state.skillOperations,
         [skillId]: "toggling",
@@ -153,11 +193,17 @@ export const useSkillStore = create<SkillState>((set, get) => ({
     try {
       await setSkillEnabled(skillId, enabled);
       message.success(`${enabled ? "已启用" : "已关闭"}技能：${skillName}`);
-      await refreshInstalledSkills();
+      void refreshInstalledSkills().catch((reason) => {
+        const errorMessage = getErrorMessage(reason, "技能状态同步失败");
+        set({
+          skillOperationError: errorMessage,
+        });
+      });
       return true;
     } catch (reason) {
       const errorMessage = getErrorMessage(reason, "技能操作失败");
       set({
+        ...createSkillSnapshot(previousInstalledSkills, previousRecognizedSkills),
         skillOperationError: errorMessage,
       });
       message.error(errorMessage);

@@ -9,6 +9,24 @@ import { useSkillStore } from "~/store";
 
 const { Paragraph, Text } = Typography;
 
+const getEnabledStatusMeta = (enabled: boolean, operation?: "removing" | "toggling") => {
+  if (operation === "toggling") {
+    return {
+      color: "processing" as const,
+      label: enabled ? "启用中" : "关闭中",
+      description: enabled
+        ? "技能已切到启用状态，正在同步到本地数据。"
+        : "技能已切到关闭状态，正在同步到本地数据。",
+    };
+  }
+
+  return {
+    color: enabled ? ("blue" as const) : undefined,
+    label: enabled ? "已启用" : "已关闭",
+    description: enabled ? "技能当前可用。" : "技能当前已关闭。",
+  };
+};
+
 export function SkillDetailDrawer() {
   const selectedSkillId = useSkillStore((state) => state.selectedSkillId);
   const skillDrawerOpen = useSkillStore((state) => state.skillDrawerOpen);
@@ -43,6 +61,7 @@ export function SkillDetailDrawer() {
     installedSummary?.summary ?? recognizedSummary?.description ?? "暂无技能说明。";
   const enabled =
     installedSummary?.enabled ?? (recognizedSummary ? !recognizedSummary.disabled : false);
+  const enabledStatus = getEnabledStatusMeta(enabled, operation);
 
   return (
     <Drawer
@@ -106,7 +125,7 @@ export function SkillDetailDrawer() {
             <Tag color="purple">自动识别</Tag>
           ) : null}
           {installed ? (
-            <Tag color={enabled ? "blue" : undefined}>{enabled ? "已启用" : "已关闭"}</Tag>
+            <Tag color={enabledStatus.color}>{enabledStatus.label}</Tag>
           ) : ready ? (
             <Tag color="blue">可直接调用</Tag>
           ) : (
@@ -127,9 +146,7 @@ export function SkillDetailDrawer() {
               {getSkillCategoryLabel(installedSummary?.category, installedSummary?.sourceType)}
             </Descriptions.Item>
             {installedSummary ? (
-              <Descriptions.Item label="启用状态">
-                {installedSummary.enabled ? "启用" : "关闭"}
-              </Descriptions.Item>
+              <Descriptions.Item label="启用状态">{enabledStatus.label}</Descriptions.Item>
             ) : null}
             {installedSummary ? (
               <Descriptions.Item label="来源">
@@ -151,7 +168,10 @@ export function SkillDetailDrawer() {
         </Card>
 
         <Card title="状态说明">
-          <Text type="secondary">当前页面展示的是本地技能与 runtime 实际识别结果。</Text>
+          <Flex vertical gap={4}>
+            <Text type="secondary">当前页面展示的是本地技能与 runtime 实际识别结果。</Text>
+            {installed ? <Text type="secondary">{enabledStatus.description}</Text> : null}
+          </Flex>
         </Card>
       </Flex>
     </Drawer>

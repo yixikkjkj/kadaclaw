@@ -40,6 +40,20 @@ interface InstalledSkillListItem {
   enabled: boolean;
 }
 
+const getEnabledStatusMeta = (enabled: boolean, operation?: "removing" | "toggling") => {
+  if (operation === "toggling") {
+    return {
+      color: "processing" as const,
+      label: enabled ? "启用中" : "关闭中",
+    };
+  }
+
+  return {
+    color: enabled ? ("blue" as const) : undefined,
+    label: enabled ? "已启用" : "已关闭",
+  };
+};
+
 export function InstalledSkillsSection() {
   const openSkill = useSkillStore((state) => state.openSkill);
   const installedSkills = useSkillStore((state) => state.installedSkills);
@@ -97,18 +111,15 @@ export function InstalledSkillsSection() {
           }}
           renderItem={(skill) => {
             const operation = skillOperations[skill.id];
-            const busy = Boolean(operation);
+            const toggling = operation === "toggling";
+            const removing = operation === "removing";
+            const statusMeta = getEnabledStatusMeta(skill.enabled, operation);
             return (
               <List.Item
                 actions={
                   skill.sourceType === "runtime"
                     ? [
-                        <Button
-                          key="view"
-                          type="link"
-                          disabled={busy}
-                          onClick={() => openSkill(skill.id)}
-                        >
+                        <Button key="view" type="link" onClick={() => openSkill(skill.id)}>
                           详情
                         </Button>,
                         <Button key="remove" disabled>
@@ -121,24 +132,19 @@ export function InstalledSkillsSection() {
                           checked={skill.enabled}
                           checkedChildren="启用"
                           unCheckedChildren="关闭"
-                          loading={operation === "toggling"}
-                          disabled={busy}
+                          loading={toggling}
+                          disabled={toggling || removing}
                           onChange={(checked) =>
                             void setInstalledSkillEnabled(skill.id, skill.name, checked)
                           }
                         />,
-                        <Button
-                          key="view"
-                          type="link"
-                          disabled={busy}
-                          onClick={() => openSkill(skill.id)}
-                        >
+                        <Button key="view" type="link" onClick={() => openSkill(skill.id)}>
                           详情
                         </Button>,
                         <Button
                           key="remove"
-                          loading={operation === "removing"}
-                          disabled={busy || !skill.removable}
+                          loading={removing}
+                          disabled={toggling || removing || !skill.removable}
                           onClick={() => void removeInstalledSkill(skill.id, skill.name)}
                         >
                           {skill.removable ? "卸载" : "外部目录"}
@@ -182,9 +188,7 @@ export function InstalledSkillsSection() {
                     </Tag>
                   ) : null}
                   {skill.sourceType !== "runtime" ? (
-                    <Tag color={skill.enabled ? "blue" : undefined}>
-                      {skill.enabled ? "已启用" : "已关闭"}
-                    </Tag>
+                    <Tag color={statusMeta.color}>{statusMeta.label}</Tag>
                   ) : null}
                 </Flex>
               </List.Item>

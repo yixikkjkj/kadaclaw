@@ -38,16 +38,28 @@ export interface NormalizedChatMessage {
 const THINKING_PATTERN = /<thinking>([\s\S]*?)<\/thinking>/gi;
 const REASONING_DETAILS_PATTERN =
   /<details[^>]*type=["']reasoning["'][^>]*>([\s\S]*?)<\/details>/gi;
-const OPENCLAW_BANNER_PATTERN = /^(🦞\s+)?OpenClaw\s+/i;
 const TOOL_STATUS_PATTERN = /^(Calling|Running|Using|Opening)\s+(.+)$/i;
 const ESCAPE_CHARACTER = String.fromCharCode(27);
-const ANSI_ESCAPE_PATTERN = new RegExp(`${ESCAPE_CHARACTER}\\[[0-9;?]*[ -/]*[@-~]`, "g");
+const ANSI_ESCAPE_PATTERN = new RegExp(
+  `${ESCAPE_CHARACTER}\\[[0-9;?]*[ -/]*[@-~]`,
+  "g",
+);
 const ANSI_SINGLE_ESCAPE_PATTERN = new RegExp(`${ESCAPE_CHARACTER}[@-_]`, "g");
 
-const TOOL_TYPE_SET = new Set(["tool-call", "toolcall", "tool-result", "toolresult"]);
+const TOOL_TYPE_SET = new Set([
+  "tool-call",
+  "toolcall",
+  "tool-result",
+  "toolresult",
+]);
 
 const THINKING_TYPE_SET = new Set(["thinking", "reasoning"]);
-const TEXT_TYPE_SET = new Set(["text", "output-text", "input-text", "markdown"]);
+const TEXT_TYPE_SET = new Set([
+  "text",
+  "output-text",
+  "input-text",
+  "markdown",
+]);
 const RESPONSE_ITEM_TYPE_SET = new Set([
   "message",
   "function-call",
@@ -69,7 +81,9 @@ const stripHtml = (value: string) =>
     .trim();
 
 const stripTerminalControlSequences = (value: string) =>
-  value.replace(ANSI_ESCAPE_PATTERN, "").replace(ANSI_SINGLE_ESCAPE_PATTERN, "");
+  value
+    .replace(ANSI_ESCAPE_PATTERN, "")
+    .replace(ANSI_SINGLE_ESCAPE_PATTERN, "");
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
@@ -95,146 +109,38 @@ const stringifyStructuredValue = (value: ChatJsonValue | undefined) => {
     return "";
   }
 
-  return typeof value === "string" ? normalizeText(value) : stringifyBlockValue(value);
-};
-
-const isOpenClawTransientStatusLine = (value: string) => {
-  const normalized = value
-    .trim()
-    .replace(/[^a-z0-9]/gi, "")
-    .toLowerCase();
-
-  return (
-    normalized.length === 0 ||
-    normalized === "thinking" ||
-    normalized === "waiting" ||
-    normalized === "waitingforagentreply" ||
-    normalized === "waitingforagentreplay" ||
-    normalized === "waitingforgatewayreply" ||
-    normalized === "waitingforgatewayagentreply" ||
-    normalized === "waitingforassistantreply" ||
-    (normalized.startsWith("waitingfor") && normalized.endsWith("reply"))
-  );
-};
-
-const isOpenClawSingleCharStatusFragment = (value: string) => {
-  const trimmed = value.trim();
-  return /^[a-z0-9◓◐◑◒●○]$/i.test(trimmed);
-};
-
-const isOpenClawStatusFragment = (value: string) => {
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return false;
-  }
-
-  if (isOpenClawSingleCharStatusFragment(trimmed)) {
-    return true;
-  }
-
-  const normalized = trimmed.replace(/[^a-z0-9]/gi, "").toLowerCase();
-
-  return (
-    normalized.length > 0 &&
-    normalized.length <= 12 &&
-    ["waiting", "for", "agent", "assistant", "gateway", "reply", "thinking"].includes(normalized)
-  );
-};
-
-const normalizeOpenClawPlainText = (value: string) => {
-  const lines = stripTerminalControlSequences(value).replace(/\r/g, "").split("\n");
-  const result: string[] = [];
-  let skipBannerTagline = false;
-  let index = 0;
-
-  while (index < lines.length) {
-    const line = lines[index];
-    const trimmed = line.trim();
-
-    if (!trimmed) {
-      if (result.length > 0 && result[result.length - 1] !== "") {
-        result.push("");
-      }
-      index += 1;
-      continue;
-    }
-
-    if (OPENCLAW_BANNER_PATTERN.test(trimmed)) {
-      skipBannerTagline = true;
-      index += 1;
-      continue;
-    }
-
-    if (skipBannerTagline) {
-      skipBannerTagline = false;
-      if (line.startsWith(" ") || line.startsWith("\t")) {
-        index += 1;
-        continue;
-      }
-    }
-
-    if (trimmed === "│" || trimmed === "◇") {
-      index += 1;
-      continue;
-    }
-
-    if (isOpenClawStatusFragment(trimmed)) {
-      const fragments: string[] = [];
-
-      while (index < lines.length && isOpenClawStatusFragment(lines[index].trim())) {
-        fragments.push(lines[index].trim());
-        index += 1;
-      }
-
-      const collapsed = fragments
-        .join("")
-        .replace(/^[◓◐◑◒●○]+/, "")
-        .trim();
-
-      if (collapsed && !isOpenClawTransientStatusLine(collapsed)) {
-        result.push(collapsed);
-      }
-
-      continue;
-    }
-
-    if (isOpenClawTransientStatusLine(trimmed)) {
-      index += 1;
-      continue;
-    }
-
-    result.push(line);
-    index += 1;
-  }
-
-  while (result[result.length - 1] === "") {
-    result.pop();
-  }
-
-  return result.join("\n").trim();
+  return typeof value === "string"
+    ? normalizeText(value)
+    : stringifyBlockValue(value);
 };
 
 const extractThinking = (value: string) => {
   const thinkingBlocks: string[] = [];
   let visibleText = value;
 
-  visibleText = visibleText.replace(THINKING_PATTERN, (_match, content: string) => {
-    const normalized = normalizeText(content);
-    if (normalized) {
-      thinkingBlocks.push(normalized);
-    }
+  visibleText = visibleText.replace(
+    THINKING_PATTERN,
+    (_match, content: string) => {
+      const normalized = normalizeText(content);
+      if (normalized) {
+        thinkingBlocks.push(normalized);
+      }
 
-    return "\n";
-  });
+      return "\n";
+    },
+  );
 
-  visibleText = visibleText.replace(REASONING_DETAILS_PATTERN, (_match, content: string) => {
-    const normalized = normalizeText(stripHtml(content));
-    if (normalized) {
-      thinkingBlocks.push(normalized);
-    }
+  visibleText = visibleText.replace(
+    REASONING_DETAILS_PATTERN,
+    (_match, content: string) => {
+      const normalized = normalizeText(stripHtml(content));
+      if (normalized) {
+        thinkingBlocks.push(normalized);
+      }
 
-    return "\n";
-  });
+      return "\n";
+    },
+  );
 
   return {
     thinkingBlocks,
@@ -306,7 +212,9 @@ const resolveToolPayload = (value: Record<string, unknown>) => {
     isRecord(value.function) ? value.function.arguments : undefined,
   ];
 
-  const payload = candidates.find((candidate) => candidate !== undefined && candidate !== null);
+  const payload = candidates.find(
+    (candidate) => candidate !== undefined && candidate !== null,
+  );
   return payload === undefined ? undefined : stringifyBlockValue(payload);
 };
 
@@ -323,7 +231,10 @@ const appendStructuredItem = (blocks: ChatMessageBlock[], item: unknown) => {
   const rawType = typeof item.type === "string" ? item.type.trim() : "";
   const normalizedType = rawType.replace(/_/g, "-").toLowerCase();
 
-  if (normalizedType === "message" && (Array.isArray(item.content) || isRecord(item.content))) {
+  if (
+    normalizedType === "message" &&
+    (Array.isArray(item.content) || isRecord(item.content))
+  ) {
     extractStructuredBlocks(item.content)?.forEach((block) => {
       blocks.push(block);
     });
@@ -365,7 +276,10 @@ const appendStructuredItem = (blocks: ChatMessageBlock[], item: unknown) => {
     return;
   }
 
-  if (normalizedType === "function-call-output" || normalizedType === "functioncalloutput") {
+  if (
+    normalizedType === "function-call-output" ||
+    normalizedType === "functioncalloutput"
+  ) {
     blocks.push({
       type: "tool",
       kind: "result",
@@ -402,7 +316,7 @@ const extractStructuredBlocks = (value: unknown): ChatMessageBlock[] | null => {
       ? value.content
       : isRecord(value) && Array.isArray(value.output)
         ? value.output
-      : null;
+        : null;
 
   if (!items) {
     return null;
@@ -487,14 +401,18 @@ const getBlockCopyText = (block: ChatMessageBlock) => {
   return "";
 };
 
-export const getNormalizedChatMessageCopyText = (message: NormalizedChatMessage) =>
+export const getNormalizedChatMessageCopyText = (
+  message: NormalizedChatMessage,
+) =>
   message.blocks
     .map((block) => getBlockCopyText(block))
     .filter(Boolean)
     .join("\n\n")
     .trim();
 
-export const normalizeChatMessage = (message: ChatMessage): NormalizedChatMessage => {
+export const normalizeChatMessage = (
+  message: ChatMessage,
+): NormalizedChatMessage => {
   let blocks: ChatMessageBlock[] = [];
   const structuredSource = message.rawContent ?? message.content;
   const sourceText = normalizeStringValue(structuredSource);
@@ -534,7 +452,9 @@ export const normalizeChatMessage = (message: ChatMessage): NormalizedChatMessag
     }
 
     if (blocks.length === 0) {
-      const normalizedPlainText = normalizeOpenClawPlainText(sourceText);
+      const normalizedPlainText = stripTerminalControlSequences(
+        sourceText,
+      ).replace(/\r/g, "");
       const toolStatusBlocks = extractToolStatusBlocks(normalizedPlainText);
       const visibleText = normalizedPlainText
         .split("\n")
@@ -554,7 +474,9 @@ export const normalizeChatMessage = (message: ChatMessage): NormalizedChatMessag
   }
 
   const displayRole = resolveDisplayRole(message, blocks);
-  const rawText = stringifyStructuredValue(structuredSource as ChatJsonValue | undefined);
+  const rawText = stringifyStructuredValue(
+    structuredSource as ChatJsonValue | undefined,
+  );
   const toolCount = blocks.filter((block) => block.type === "tool").length;
   const textContent = getNormalizedChatMessageCopyText({
     id: message.id,

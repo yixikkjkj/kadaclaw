@@ -1,44 +1,25 @@
 import { create } from "zustand";
-import { getOpenClawAuthConfig, type OpenClawAuthConfig } from "~/api";
 import { type RuntimeStatus } from "~/types";
 
 interface RuntimeState {
   runtimeStatus: RuntimeStatus;
   runtimeMessage: string;
-  authConfig: OpenClawAuthConfig | null;
-  authConfigLoaded: boolean;
+  agentConfigured: boolean;
   setRuntimeState: (status: RuntimeStatus, message: string) => void;
-  setAuthConfig: (config: OpenClawAuthConfig | null) => void;
-  refreshAuthConfig: () => Promise<void>;
+  setAgentConfigured: (configured: boolean) => void;
 }
 
 export const useRuntimeStore = create<RuntimeState>((set) => ({
   runtimeStatus: "idle",
-  runtimeMessage: "尚未检测 OpenClaw runtime",
-  authConfig: null,
-  authConfigLoaded: false,
+  runtimeMessage: "Agent 后端尚未初始化",
+  agentConfigured: false,
   setRuntimeState: (status, message) =>
     set({
       runtimeStatus: status,
       runtimeMessage: message,
     }),
-  setAuthConfig: (config) =>
+  setAgentConfigured: (configured) =>
     set({
-      authConfig: config,
-      authConfigLoaded: true,
+      agentConfigured: configured,
     }),
-  refreshAuthConfig: async () => {
-    try {
-      const config = await getOpenClawAuthConfig();
-      set({
-        authConfig: config,
-        authConfigLoaded: true,
-      });
-    } catch {
-      set({
-        authConfig: null,
-        authConfigLoaded: true,
-      });
-    }
-  },
 }));

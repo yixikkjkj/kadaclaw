@@ -24,10 +24,6 @@ export const getSkillAuthorLabel = (author: string | undefined, sourceType?: Ski
     return sourceType === "runtime" ? "系统提供" : "--";
   }
 
-  if (normalized === "OpenClaw Runtime") {
-    return "系统提供";
-  }
-
   return normalized;
 };
 

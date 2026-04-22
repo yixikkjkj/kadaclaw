@@ -98,11 +98,15 @@ export function InstalledSkillsSection() {
     <Flex vertical gap={20}>
       <Card title="已启用技能">
         {skillOperationError ? (
-          <Alert type="error" showIcon message={skillOperationError} style={{ marginBottom: 16 }} />
+          <Alert
+            type="error"
+            showIcon
+            message={skillOperationError}
+            style={{ marginBottom: 16 }}
+          />
         ) : null}
         <Paragraph type="secondary">
-          这里同时展示本地已安装技能和当前 runtime 已识别技能。只要 OpenClaw
-          已识别并就绪，就可以在对话中直接调用。
+          这里同时展示本地已安装技能和当前系统已识别技能。只要技能已识别并就绪，就可以在对话中直接调用。
         </Paragraph>
         <List
           dataSource={mergedSkills}
@@ -119,7 +123,11 @@ export function InstalledSkillsSection() {
                 actions={
                   skill.sourceType === "runtime"
                     ? [
-                        <Button key="view" type="link" onClick={() => openSkill(skill.id)}>
+                        <Button
+                          key="view"
+                          type="link"
+                          onClick={() => openSkill(skill.id)}
+                        >
                           详情
                         </Button>,
                         <Button key="remove" disabled>
@@ -135,17 +143,27 @@ export function InstalledSkillsSection() {
                           loading={toggling}
                           disabled={toggling || removing}
                           onChange={(checked) =>
-                            void setInstalledSkillEnabled(skill.id, skill.name, checked)
+                            void setInstalledSkillEnabled(
+                              skill.id,
+                              skill.name,
+                              checked,
+                            )
                           }
                         />,
-                        <Button key="view" type="link" onClick={() => openSkill(skill.id)}>
+                        <Button
+                          key="view"
+                          type="link"
+                          onClick={() => openSkill(skill.id)}
+                        >
                           详情
                         </Button>,
                         <Button
                           key="remove"
                           loading={removing}
                           disabled={toggling || removing || !skill.removable}
-                          onClick={() => void removeInstalledSkill(skill.id, skill.name)}
+                          onClick={() =>
+                            void removeInstalledSkill(skill.id, skill.name)
+                          }
                         >
                           {skill.removable ? "卸载" : "外部目录"}
                         </Button>,
@@ -154,7 +172,12 @@ export function InstalledSkillsSection() {
               >
                 <List.Item.Meta
                   avatar={
-                    <div className={[styles.listAvatar, styles.featuredAvatar].join(" ")}>
+                    <div
+                      className={[
+                        styles.listAvatar,
+                        styles.featuredAvatar,
+                      ].join(" ")}
+                    >
                       {skill.name.slice(0, 1)}
                     </div>
                   }
@@ -163,14 +186,22 @@ export function InstalledSkillsSection() {
                     <Flex vertical gap={6}>
                       <Text>{skill.summary}</Text>
                       <Text type="secondary">
-                        {getSkillCategoryLabel(skill.category, skill.sourceType)} · {skill.version}
+                        {getSkillCategoryLabel(
+                          skill.category,
+                          skill.sourceType,
+                        )}{" "}
+                        · {skill.version}
                       </Text>
                     </Flex>
                   }
                 />
                 <Flex gap={8} wrap>
-                  <Tag color="gold">{getSkillCategoryLabel(skill.category, skill.sourceType)}</Tag>
-                  <Tag>{getSkillAuthorLabel(skill.author, skill.sourceType)}</Tag>
+                  <Tag color="gold">
+                    {getSkillCategoryLabel(skill.category, skill.sourceType)}
+                  </Tag>
+                  <Tag>
+                    {getSkillAuthorLabel(skill.author, skill.sourceType)}
+                  </Tag>
                   <Tag
                     color={
                       skill.sourceType === "bundled"
@@ -206,12 +237,18 @@ export function InstalledSkillsSection() {
             <Col xs={24} md={12} key={skill.id}>
               <Card>
                 <Descriptions column={1} size="small">
-                  <Descriptions.Item label="技能 ID">{skill.id}</Descriptions.Item>
+                  <Descriptions.Item label="技能 ID">
+                    {skill.id}
+                  </Descriptions.Item>
                   <Descriptions.Item label="来源">
                     {getSkillSourceLabel(skill.sourceLabel, skill.sourceType)}
                   </Descriptions.Item>
-                  <Descriptions.Item label="Manifest">{skill.manifestPath}</Descriptions.Item>
-                  <Descriptions.Item label="目录">{skill.directory}</Descriptions.Item>
+                  <Descriptions.Item label="Manifest">
+                    {skill.manifestPath}
+                  </Descriptions.Item>
+                  <Descriptions.Item label="目录">
+                    {skill.directory}
+                  </Descriptions.Item>
                 </Descriptions>
               </Card>
             </Col>

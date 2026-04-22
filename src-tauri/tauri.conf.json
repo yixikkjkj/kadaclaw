@@ -2,7 +2,7 @@
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Kadaclaw",
   "version": "0.1.0",
-  "identifier": "com.kadaclaw.app",
+  "identifier": "com.kadaclaw.desktop",
   "build": {
     "beforeDevCommand": "yarn dev",
     "beforeBuildCommand": "yarn build",

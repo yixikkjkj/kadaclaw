@@ -37,7 +37,7 @@ const normalizeStreamingStatus = (value: string) => {
     normalized === "waitingforassistantreply" ||
     (normalized.startsWith("waitingfor") && normalized.endsWith("reply"));
 
-  if (isTransient || value.trim() === "OpenClaw 正在处理请求") {
+  if (isTransient) {
     return "正在执行";
   }
 
@@ -103,16 +103,13 @@ const renderGroupAvatar = (role: ChatMessageDisplayRole) => {
 
 export const ChatPage = () => {
   const navigate = useNavigate();
-  const runtimeStatus = useRuntimeStore((state) => state.runtimeStatus);
-  const authConfig = useRuntimeStore((state) => state.authConfig);
-  const refreshAuthConfig = useRuntimeStore((state) => state.refreshAuthConfig);
+  const agentConfigured = useRuntimeStore((state) => state.agentConfigured);
   const activeChatSession = useChatStore(selectActiveChatSession);
   const chatError = useChatStore((state) => state.chatError);
   const streamingRunning = useChatStore((state) => state.streamingRunning);
   const streamingSessionId = useChatStore((state) => state.streamingSessionId);
   const streamingStatus = useChatStore((state) => state.streamingStatus);
   const streamingReply = useChatStore((state) => state.streamingReply);
-  const streamingRawOutput = useChatStore((state) => state.streamingRawOutput);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -122,17 +119,7 @@ export const ChatPage = () => {
     }
 
     container.scrollTop = container.scrollHeight;
-  }, [
-    activeChatSession,
-    chatError,
-    streamingRawOutput,
-    streamingRunning,
-    streamingStatus,
-  ]);
-
-  useEffect(() => {
-    void refreshAuthConfig();
-  }, [refreshAuthConfig, runtimeStatus]);
+  }, [activeChatSession, chatError, streamingRunning, streamingStatus]);
 
   const executionStatus = normalizeStreamingStatus(streamingStatus);
   const activeSessionTitle = activeChatSession?.title || "New Chat";
@@ -146,7 +133,7 @@ export const ChatPage = () => {
           id: `streaming-${streamingSessionId}`,
           role: "assistant",
           content: streamingReply || executionStatus,
-          rawContent: streamingRawOutput ?? streamingReply ?? executionStatus,
+          rawContent: streamingReply || executionStatus,
           createdAt: new Date().toISOString(),
         })
       : null;
@@ -155,13 +142,13 @@ export const ChatPage = () => {
 
   return (
     <Flex vertical className={styles.chatPanel}>
-      {authConfig && !authConfig.apiKeyConfigured ? (
+      {!agentConfigured ? (
         <Alert
           className={styles.chatAuthAlert}
           type="warning"
           showIcon
-          title="当前模型授权尚未配置"
-          description={`当前使用 ${authConfig.model}，需要前往设置页补充 ${authConfig.apiKeyEnvName}。`}
+          title="Agent 尚未配置"
+          description="请前往设置页配置 LLM 提供商和 API Key。"
           action={
             <Button
               size="small"

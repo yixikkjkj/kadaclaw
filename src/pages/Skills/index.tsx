@@ -13,10 +13,10 @@ import {
 } from "antd";
 import { useState } from "react";
 import { useNavigate } from "react-router";
+import { open } from "@tauri-apps/plugin-dialog";
 import {
   installSkillFromDirectory,
   installSkillFromUrl,
-  pickOpenClawLocalSkillsDir,
   type RecognizedSkillRecord,
 } from "~/api";
 import { ROUTE_PATHS } from "~/common/constants";
@@ -32,7 +32,9 @@ export function SkillsPage() {
   const recognizedSkillIds = useSkillStore((state) => state.recognizedSkillIds);
   const readySkillIds = useSkillStore((state) => state.readySkillIds);
   const openSkill = useSkillStore((state) => state.openSkill);
-  const refreshInstalledSkills = useSkillStore((state) => state.refreshInstalledSkills);
+  const refreshInstalledSkills = useSkillStore(
+    (state) => state.refreshInstalledSkills,
+  );
   const navigate = useNavigate();
   const [skillUrl, setSkillUrl] = useState("");
   const [installingFromUrl, setInstallingFromUrl] = useState(false);
@@ -41,8 +43,12 @@ export function SkillsPage() {
   const handleInstallFromDirectory = async () => {
     setInstallingFromDirectory(true);
     try {
-      const directory = await pickOpenClawLocalSkillsDir();
-      if (!directory) {
+      const directory = await open({
+        directory: true,
+        multiple: false,
+        title: "选择技能目录",
+      });
+      if (!directory || Array.isArray(directory)) {
         return;
       }
 
@@ -86,14 +92,23 @@ export function SkillsPage() {
             <Title level={2} style={{ margin: 0 }}>
               技能中心
             </Title>
-            <Paragraph type="secondary" style={{ marginTop: 8, marginBottom: 0 }}>
+            <Paragraph
+              type="secondary"
+              style={{ marginTop: 8, marginBottom: 0 }}
+            >
               这里集中展示当前工作台可调用的本地技能和 runtime 已识别技能。
             </Paragraph>
           </div>
           <div className={styles.marketStats}>
-            <div className={styles.marketStatChip}>已启用技能 {installedSkillIds.length}</div>
-            <div className={styles.marketStatChip}>已识别技能 {recognizedSkillIds.length}</div>
-            <div className={styles.marketStatChip}>当前可用 {readySkillIds.length}</div>
+            <div className={styles.marketStatChip}>
+              已启用技能 {installedSkillIds.length}
+            </div>
+            <div className={styles.marketStatChip}>
+              已识别技能 {recognizedSkillIds.length}
+            </div>
+            <div className={styles.marketStatChip}>
+              当前可用 {readySkillIds.length}
+            </div>
           </div>
         </div>
       </Card>
@@ -101,17 +116,29 @@ export function SkillsPage() {
       <Row gutter={[16, 16]}>
         <Col xs={24} md={8}>
           <Card>
-            <Statistic title="已启用技能" value={installedSkillIds.length} suffix="个" />
+            <Statistic
+              title="已启用技能"
+              value={installedSkillIds.length}
+              suffix="个"
+            />
           </Card>
         </Col>
         <Col xs={24} md={8}>
           <Card>
-            <Statistic title="可直接调用" value={readySkillIds.length} suffix="个" />
+            <Statistic
+              title="可直接调用"
+              value={readySkillIds.length}
+              suffix="个"
+            />
           </Card>
         </Col>
         <Col xs={24} md={8}>
           <Card>
-            <Statistic title="Runtime 已识别" value={recognizedSkills.length} suffix="个" />
+            <Statistic
+              title="Runtime 已识别"
+              value={recognizedSkills.length}
+              suffix="个"
+            />
           </Card>
         </Col>
       </Row>
@@ -126,7 +153,8 @@ export function SkillsPage() {
                 本地导入
               </Title>
               <Paragraph type="secondary" style={{ marginBottom: 0 }}>
-                选择一个技能目录导入。目录内需要直接包含 `skill.json` 和 `SKILL.md`。
+                选择一个技能目录导入。目录内需要直接包含 `skill.json` 和
+                `SKILL.md`。
               </Paragraph>
               <Flex gap={8} wrap>
                 <Button
@@ -136,7 +164,9 @@ export function SkillsPage() {
                 >
                   选择目录导入
                 </Button>
-                <Button onClick={() => navigate(ROUTE_PATHS.settings)}>管理本地 Skills 目录</Button>
+                <Button onClick={() => navigate(ROUTE_PATHS.settings)}>
+                  管理本地 Skills 目录
+                </Button>
               </Flex>
             </div>
 
@@ -172,7 +202,7 @@ export function SkillsPage() {
 
       <Card title="Runtime 当前识别到的技能">
         <Paragraph type="secondary">
-          这里展示的是 OpenClaw runtime 当前返回的真实技能清单。
+          这里展示的是当前系统识别到的真实技能清单。
         </Paragraph>
         <List<RecognizedSkillRecord>
           dataSource={recognizedSkills}
@@ -183,15 +213,28 @@ export function SkillsPage() {
             return (
               <List.Item
                 actions={[
-                  <Button key="view" type="link" onClick={() => openSkill(skill.name)}>
+                  <Button
+                    key="view"
+                    type="link"
+                    onClick={() => openSkill(skill.name)}
+                  >
                     详情
                   </Button>,
                 ]}
               >
-                <List.Item.Meta title={skill.name} description={skill.description} />
+                <List.Item.Meta
+                  title={skill.name}
+                  description={skill.description}
+                />
                 <Flex gap={8} wrap justify="end">
-                  <Tag color={installedSkillIds.includes(skill.name) ? "blue" : "purple"}>
-                    {installedSkillIds.includes(skill.name) ? "本地已安装" : "自动识别"}
+                  <Tag
+                    color={
+                      installedSkillIds.includes(skill.name) ? "blue" : "purple"
+                    }
+                  >
+                    {installedSkillIds.includes(skill.name)
+                      ? "本地已安装"
+                      : "自动识别"}
                   </Tag>
                   <Tag color={skill.eligible ? "blue" : "orange"}>
                     {skill.eligible ? "可直接调用" : "已识别"}

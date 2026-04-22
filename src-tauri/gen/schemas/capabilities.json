@@ -1,1 +1,1 @@
-{"main-window-overlay":{"identifier":"main-window-overlay","description":"Allow the main window to use overlay title bar drag regions.","local":true,"windows":["main"],"webviews":["main"],"permissions":["core:default","core:window:allow-start-dragging"]}}
+{"main-window-overlay":{"identifier":"main-window-overlay","description":"Allow the main window to use overlay title bar drag regions.","local":true,"windows":["main"],"webviews":["main"],"permissions":["core:default","core:window:allow-start-dragging","dialog:allow-open"]}}

@@ -82,10 +82,16 @@ interface ChatState {
   chatError: string | null;
   streamingSessionId: string | null;
   streamingStatus: string;
+  streamingToolName: string | null;
   streamingReply: string;
   streamingRunning: boolean;
   streamingStopping: boolean;
   streamStopRequested: boolean;
+  lastTokenUsage: {
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+  } | null;
   hydrateChatHistory: () => Promise<void>;
   setChatError: (error: string | null) => void;
   syncActiveSessionId: (sessionId: string) => void;
@@ -183,10 +189,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
   chatError: null,
   streamingSessionId: null,
   streamingStatus: "",
+  streamingToolName: null,
   streamingReply: "",
   streamingRunning: false,
   streamingStopping: false,
   streamStopRequested: false,
+  lastTokenUsage: null,
   hydrateChatHistory: async () => {
     if (get().chatHistoryLoaded) {
       return;
@@ -331,10 +339,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set({
       streamingSessionId: null,
       streamingStatus: "",
+      streamingToolName: null,
       streamingReply: "",
       streamingRunning: false,
       streamingStopping: false,
       streamStopRequested: false,
+      // lastTokenUsage is intentionally preserved so UI can show it after streaming ends
     });
   },
   sendMessage: async (message) => {
@@ -360,6 +370,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set({
       streamingSessionId: sessionId,
       streamingStatus: "正在执行",
+      streamingToolName: null,
       streamingReply: "",
       streamingRunning: true,
       streamingStopping: false,
@@ -376,15 +387,28 @@ export const useChatStore = create<ChatState>((set, get) => ({
         accumulatedReply += event.delta;
         set({ streamingReply: accumulatedReply });
       } else if (event.type === "tool_call_start") {
-        set({ streamingStatus: `调用工具: ${event.name}` });
+        set({
+          streamingStatus: `调用工具: ${event.name}`,
+          streamingToolName: event.name,
+        });
       } else if (event.type === "tool_call_result") {
+        const durationLabel =
+          event.duration_ms !== undefined ? ` (${event.duration_ms}ms)` : "";
         pendingToolMessages.push({
           id: buildMessageId("system"),
           role: "system",
-          content: `**${event.name}**\n\n${event.result}`,
+          content: `**${event.name}**${durationLabel}\n\n${event.result}`,
           createdAt: dayjs().toISOString(),
         });
-        set({ streamingStatus: "正在执行" });
+        set({ streamingStatus: "正在执行", streamingToolName: null });
+      } else if (event.type === "token_usage") {
+        set({
+          lastTokenUsage: {
+            promptTokens: event.prompt_tokens,
+            completionTokens: event.completion_tokens,
+            totalTokens: event.total_tokens,
+          },
+        });
       } else if (event.type === "done") {
         // committed below after promise resolves
       } else if (event.type === "error") {

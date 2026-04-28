@@ -53,6 +53,7 @@ pub mod browser;
 pub mod exec;
 pub mod fs;
 pub mod mcp;
+pub mod memory;
 pub mod registry;
 pub mod web;
 

@@ -8,7 +8,7 @@ use crate::base::models::McpServerConfig;
 use crate::util::error::Result;
 
 use super::super::{DynTool, Tool, ToolContext};
-use super::client::{McpClient, McpToolDef};
+use super::client::{AnyMcpClient, McpHttpClient, McpStdioClient, McpToolDef};
 
 // ── McpTool wraps a single MCP server tool ────────────────────────────────────
 
@@ -16,7 +16,7 @@ pub struct McpTool {
   pub tool_name: String,
   pub description: String,
   pub parameters_schema: Value,
-  pub client: Arc<McpClient>,
+  pub client: Arc<AnyMcpClient>,
 }
 
 #[async_trait]
@@ -40,7 +40,13 @@ impl Tool for McpTool {
 
 pub struct McpManager {
   /// server_name -> (client, tool defs)
-  servers: Mutex<HashMap<String, (Arc<McpClient>, Vec<McpToolDef>)>>,
+  servers: Mutex<HashMap<String, (Arc<AnyMcpClient>, Vec<McpToolDef>)>>,
+}
+
+impl Default for McpManager {
+  fn default() -> Self {
+    Self::new()
+  }
 }
 
 impl McpManager {
@@ -54,29 +60,46 @@ impl McpManager {
   pub async fn start_all(&self, configs: &HashMap<String, McpServerConfig>) {
     let mut servers = self.servers.lock().await;
     for (name, cfg) in configs {
-      if !cfg.enabled {
+      if !cfg.is_enabled() {
         continue;
       }
-      match McpClient::start(
-        &cfg.command,
-        &cfg.args,
-        &cfg.env,
-        cfg.startup_timeout_secs.unwrap_or(30),
-        cfg.call_timeout_secs.unwrap_or(60),
-      )
-      .await
-      {
-        Ok(client) => {
-          let client = Arc::new(client);
-          match client.list_tools().await {
-            Ok(tools) => {
-              tracing::info!("MCP server '{}' started, {} tools available", name, tools.len());
-              servers.insert(name.clone(), (client, tools));
-            },
-            Err(e) => {
-              tracing::warn!("MCP server '{}' list_tools failed: {e}", name);
-            },
+
+      let client_result: Result<Arc<AnyMcpClient>> = match cfg {
+        McpServerConfig::Stdio {
+          command,
+          args,
+          env,
+          auto_start,
+          startup_timeout_secs,
+          call_timeout_secs,
+          ..
+        } => {
+          if !auto_start {
+            continue;
           }
+          McpStdioClient::start(command, args, env, *startup_timeout_secs, *call_timeout_secs)
+            .await
+            .map(|c| Arc::new(AnyMcpClient::Stdio(c)))
+        },
+        McpServerConfig::Http {
+          url,
+          headers,
+          call_timeout_secs,
+          ..
+        } => McpHttpClient::connect(url, headers, *call_timeout_secs)
+          .await
+          .map(|c| Arc::new(AnyMcpClient::Http(c))),
+      };
+
+      match client_result {
+        Ok(client) => match client.list_tools().await {
+          Ok(tools) => {
+            tracing::info!("MCP server '{}' started, {} tools available", name, tools.len());
+            servers.insert(name.clone(), (client, tools));
+          },
+          Err(e) => {
+            tracing::warn!("MCP server '{}' list_tools failed: {e}", name);
+          },
         },
         Err(e) => {
           tracing::warn!("Failed to start MCP server '{}': {e}", name);
@@ -105,6 +128,69 @@ impl McpManager {
   /// Shutdown all MCP server connections (drop clients).
   pub async fn shutdown(&self) {
     let mut servers = self.servers.lock().await;
+    for (_, (client, _)) in servers.iter() {
+      client.shutdown().await;
+    }
     servers.clear();
+  }
+
+  /// Restart a single MCP server by name.
+  pub async fn restart_server(&self, name: &str, cfg: &McpServerConfig) {
+    // Shut down existing instance if running
+    {
+      let mut servers = self.servers.lock().await;
+      if let Some((client, _)) = servers.remove(name) {
+        client.shutdown().await;
+      }
+    }
+
+    if !cfg.is_enabled() {
+      return;
+    }
+
+    let client_result: Result<Arc<AnyMcpClient>> = match cfg {
+      McpServerConfig::Stdio {
+        command,
+        args,
+        env,
+        auto_start,
+        startup_timeout_secs,
+        call_timeout_secs,
+        ..
+      } => {
+        if !auto_start {
+          return;
+        }
+        McpStdioClient::start(command, args, env, *startup_timeout_secs, *call_timeout_secs)
+          .await
+          .map(|c| Arc::new(AnyMcpClient::Stdio(c)))
+      },
+      McpServerConfig::Http {
+        url,
+        headers,
+        call_timeout_secs,
+        ..
+      } => McpHttpClient::connect(url, headers, *call_timeout_secs)
+        .await
+        .map(|c| Arc::new(AnyMcpClient::Http(c))),
+    };
+
+    match client_result {
+      Ok(client) => match client.list_tools().await {
+        Ok(tools) => {
+          tracing::info!("MCP server '{}' restarted, {} tools", name, tools.len());
+          let mut servers = self.servers.lock().await;
+          servers.insert(name.to_string(), (client, tools));
+        },
+        Err(e) => tracing::warn!("MCP server '{}' list_tools failed after restart: {e}", name),
+      },
+      Err(e) => tracing::warn!("Failed to restart MCP server '{}': {e}", name),
+    }
+  }
+
+  /// Returns a map of server_name → is_running.
+  pub async fn server_statuses(&self) -> HashMap<String, bool> {
+    let servers = self.servers.lock().await;
+    servers.keys().map(|name| (name.clone(), true)).collect()
   }
 }

@@ -8,7 +8,7 @@ use tokio::sync::mpsc;
 
 use crate::util::error::{KadaError, Result};
 
-use super::{ChatMessage, LLMResponse, Provider, StreamChunk, ToolCall, ToolCallFunction};
+use super::{ChatMessage, LLMResponse, Provider, StreamChunk, TokenUsage, ToolCall, ToolCallFunction};
 
 const ANTHROPIC_API_BASE: &str = "https://api.anthropic.com";
 const ANTHROPIC_VERSION: &str = "2023-06-01";
@@ -231,6 +231,8 @@ impl Provider for AnthropicProvider {
     // Accumulate tool calls by index
     let mut tool_acc: HashMap<usize, (String, String, String)> = HashMap::new(); // idx -> (id, name, partial_json)
     let mut finish_reason = "stop".to_string();
+    let mut input_tokens: u32 = 0;
+    let mut output_tokens: u32 = 0;
 
     let mut stream = resp.bytes_stream();
     let mut buffer = String::new();
@@ -296,6 +298,16 @@ impl Provider for AnthropicProvider {
                 if let Some(reason) = val["delta"]["stop_reason"].as_str() {
                   finish_reason = if reason == "tool_use" { "tool_calls".to_string() } else { "stop".to_string() };
                 }
+                // message_delta carries output token count
+                if let Some(ct) = val["usage"]["output_tokens"].as_u64() {
+                  output_tokens = ct as u32;
+                }
+              },
+              Some("message_start") => {
+                // message_start carries input token count
+                if let Some(it) = val["message"]["usage"]["input_tokens"].as_u64() {
+                  input_tokens = it as u32;
+                }
               },
               _ => {},
             }
@@ -317,7 +329,21 @@ impl Provider for AnthropicProvider {
         .collect()
     };
 
-    let _ = tx.send(StreamChunk::Done { finish_reason, tool_calls }).await;
+    let _ = tx
+      .send(StreamChunk::Done {
+        finish_reason,
+        tool_calls,
+        usage: if input_tokens > 0 || output_tokens > 0 {
+          Some(TokenUsage {
+            prompt_tokens: input_tokens,
+            completion_tokens: output_tokens,
+            total_tokens: input_tokens + output_tokens,
+          })
+        } else {
+          None
+        },
+      })
+      .await;
     Ok(())
   }
 }

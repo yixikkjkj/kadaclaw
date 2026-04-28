@@ -1,15 +1,21 @@
 use std::sync::atomic::Ordering;
+use std::sync::Arc;
 
 use tauri::ipc::Channel;
 use tauri::{AppHandle, Manager};
+use tokio::sync::Mutex;
 
 use crate::base::agent::{AgentRuntime, AgentStreamEvent};
 use crate::base::config::read_agent_config;
 use crate::base::history::{read_chat_history, write_chat_history};
 use crate::base::models::ChatHistoryState;
 use crate::base::providers::factory::create_provider;
+use crate::base::telemetry::UsageStats;
+use crate::base::tools::mcp::manager::McpManager;
+use crate::base::tools::memory::build_memory_tools;
 use crate::base::tools::{ToolContext, ToolRegistry};
 use crate::share::agent::AppAgentState;
+use crate::share::skills::build_skill_injection;
 
 #[tauri::command]
 pub fn get_chat_history(app: AppHandle) -> Result<Option<ChatHistoryState>, String> {
@@ -63,20 +69,87 @@ pub async fn send_message(
 
   let registry = ToolRegistry::new();
   // Register tools from enabled list if configured
-  let tools = if config.enabled_tools.is_empty() {
-    registry.all().into_iter().cloned().collect()
+  let mut tools = if config.enabled_tools.is_empty() {
+    registry.all().into_iter().cloned().collect::<Vec<_>>()
   } else {
     registry.get_tools_for_session(Some(&config.enabled_tools))
   };
 
-  let runtime = AgentRuntime::new(provider, tools, tool_ctx, config.system_prompt.clone(), config.max_tool_rounds);
+  // Append MCP tools
+  let mcp_manager = app.state::<Arc<Mutex<McpManager>>>();
+  let mcp_tools = mcp_manager.lock().await.all_tools().await;
+  tools.extend(mcp_tools);
+
+  // Open a MemoryStore handle for tool use and memory injection.
+  // SQLite WAL mode allows multiple readers, so opening a second handle is safe.
+  let memory_arc = crate::base::memory::MemoryStore::open(&data_dir)
+    .ok()
+    .map(std::sync::Arc::new);
+
+  if let Some(ref mem) = memory_arc {
+    tools.extend(build_memory_tools(std::sync::Arc::clone(mem)));
+  }
+
+  // Retrieve relevant memories and inject into system prompt
+  let memory_injection = if let Some(ref mem) = memory_arc {
+    match mem.search(&message, None, None, 5) {
+      Ok(entries) if !entries.is_empty() => {
+        let lines = entries
+          .iter()
+          .map(|e| format!("- [{}] {}", e.memory_type, e.content))
+          .collect::<Vec<_>>()
+          .join("\n");
+        format!("\n\n---\n# Relevant Memories\n\n{lines}")
+      },
+      _ => String::new(),
+    }
+  } else {
+    String::new()
+  };
+
+  // Build skill injection (SKILL.md content → system prompt)
+  let skill_result = build_skill_injection(&app)?;
+
+  // Apply per-skill tool whitelist: if any enabled skill declares a tools list,
+  // restrict to the union of those declared tools.
+  if let Some(ref whitelist) = skill_result.tool_whitelist {
+    tools.retain(|t| whitelist.contains(t.name()));
+  }
+
+  let effective_system_prompt = if skill_result.injection.is_empty() {
+    format!("{}{}", config.system_prompt, memory_injection)
+  } else {
+    format!("{}\n\n{}{}", config.system_prompt, skill_result.injection, memory_injection)
+  };
+
+  let runtime = AgentRuntime::new(
+    provider,
+    tools,
+    tool_ctx,
+    effective_system_prompt,
+    config.max_tool_rounds,
+    config.token_budget,
+    config.compact_threshold,
+  );
 
   let mut ctx = agent_state.get_or_create_session(&session_id).await;
   let stop_flag = std::sync::Arc::clone(&agent_state.stop_flag);
 
-  runtime.run(&mut ctx, &message, channel, stop_flag).await;
+  let run_stats = runtime.run(&mut ctx, &message, channel, stop_flag).await;
 
   agent_state.save_session(ctx).await;
+
+  // Record telemetry
+  let mut usage = UsageStats::load(&data_dir);
+  usage.record(
+    &session_id,
+    run_stats.prompt_tokens,
+    run_stats.completion_tokens,
+    run_stats.tool_calls,
+    run_stats.tool_errors,
+  );
+  usage.save(&data_dir);
+
   Ok(())
 }
 

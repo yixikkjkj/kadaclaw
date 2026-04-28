@@ -5,9 +5,22 @@ import { Channel, invoke } from "@tauri-apps/api/core";
 export type AgentStreamEvent =
   | { type: "text_delta"; delta: string }
   | { type: "tool_call_start"; id: string; name: string; args: string }
-  | { type: "tool_call_result"; id: string; name: string; result: string }
+  | {
+      type: "tool_call_result";
+      id: string;
+      name: string;
+      result: string;
+      duration_ms: number;
+      success: boolean;
+    }
   | { type: "done"; finish_reason: string }
-  | { type: "error"; message: string };
+  | { type: "error"; message: string }
+  | {
+      type: "token_usage";
+      prompt_tokens: number;
+      completion_tokens: number;
+      total_tokens: number;
+    };
 
 // ── Provider / Agent config ───────────────────────────────────────────────────
 
@@ -28,14 +41,26 @@ export interface BrowserConfig {
   cdpPort: number;
 }
 
-export interface McpServerConfig {
+export interface McpServerConfigStdio {
+  type: "stdio";
   command: string;
   args: string[];
   env: Record<string, string>;
-  startupTimeoutSecs?: number | null;
-  callTimeoutSecs?: number | null;
+  autoStart: boolean;
   enabled: boolean;
+  callTimeoutSecs: number;
+  startupTimeoutSecs: number;
 }
+
+export interface McpServerConfigHttp {
+  type: "http";
+  url: string;
+  headers: Record<string, string>;
+  enabled: boolean;
+  callTimeoutSecs: number;
+}
+
+export type McpServerConfig = McpServerConfigStdio | McpServerConfigHttp;
 
 export interface AgentConfig {
   providers: Record<string, ProviderConfig>;
@@ -46,6 +71,8 @@ export interface AgentConfig {
   webSearch: WebSearchConfig;
   browser: BrowserConfig;
   mcpServers: Record<string, McpServerConfig>;
+  tokenBudget: number;
+  compactThreshold: number;
 }
 
 // ── API functions ─────────────────────────────────────────────────────────────
@@ -64,6 +91,38 @@ export function listConfiguredProviders() {
 
 export function listAvailableTools() {
   return invoke<string[]>("list_available_tools");
+}
+
+export function restartMcpServer(serverId: string) {
+  return invoke<void>("restart_mcp_server", { serverId });
+}
+
+export function getMcpServerStatus() {
+  return invoke<Record<string, boolean>>("get_mcp_server_status");
+}
+
+// ── Telemetry ─────────────────────────────────────────────────────────────────
+
+export interface SessionStats {
+  sessionId: string;
+  promptTokens: number;
+  completionTokens: number;
+  toolCalls: number;
+  toolErrors: number;
+  messages: number;
+}
+
+export interface UsageStats {
+  totalPromptTokens: number;
+  totalCompletionTokens: number;
+  totalToolCalls: number;
+  totalToolErrors: number;
+  totalMessages: number;
+  sessions: Record<string, SessionStats>;
+}
+
+export function getUsageStats() {
+  return invoke<UsageStats>("get_usage_stats");
 }
 
 /**

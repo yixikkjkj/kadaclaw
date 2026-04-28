@@ -1,0 +1,83 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 16px;
+  overflow: hidden;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.title {
+  font-size: 18px;
+  font-weight: 600;
+  flex: 1;
+}
+
+.toolbar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.searchInput {
+  flex: 1;
+}
+
+.list {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.empty {
+  padding: 40px 0;
+  text-align: center;
+}
+
+.row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--ant-color-split);
+}
+
+.rowHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.typeBadge {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--ant-color-primary);
+}
+
+.rowMeta {
+  font-size: 11px;
+  color: var(--ant-color-text-quaternary);
+}
+
+.content {
+  font-size: 13px;
+  color: var(--ant-color-text);
+  white-space: pre-wrap;
+}
+
+.editArea {
+  width: 100%;
+  resize: vertical;
+}
+
+.rowActions {
+  display: flex;
+  gap: 4px;
+  margin-top: 4px;
+}

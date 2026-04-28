@@ -101,24 +101,61 @@ impl Default for BrowserConfig {
 
 // ---- MCP server config ----
 
-#[derive(Debug, Serialize, Deserialize, Clone, Default)]
-#[serde(rename_all = "camelCase")]
-pub struct McpServerConfig {
-  pub command: String,
-  #[serde(default)]
-  pub args: Vec<String>,
-  #[serde(default)]
-  pub env: HashMap<String, String>,
-  #[serde(default)]
-  pub startup_timeout_secs: Option<u64>,
-  #[serde(default)]
-  pub call_timeout_secs: Option<u64>,
-  #[serde(default = "bool_true")]
-  pub enabled: bool,
-}
-
 fn bool_true() -> bool {
   true
+}
+fn default_call_timeout() -> u64 {
+  60
+}
+fn default_startup_timeout() -> u64 {
+  30
+}
+
+/// MCP server configuration — supports both stdio child-process and HTTP transports.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(tag = "type", rename_all = "lowercase")]
+pub enum McpServerConfig {
+  Stdio {
+    command: String,
+    #[serde(default)]
+    args: Vec<String>,
+    #[serde(default)]
+    env: HashMap<String, String>,
+    /// Launch the process automatically on app start (default: true).
+    #[serde(default = "bool_true")]
+    auto_start: bool,
+    #[serde(default = "bool_true")]
+    enabled: bool,
+    #[serde(default = "default_call_timeout")]
+    call_timeout_secs: u64,
+    #[serde(default = "default_startup_timeout")]
+    startup_timeout_secs: u64,
+  },
+  Http {
+    url: String,
+    /// Extra request headers (e.g. Authorization).
+    #[serde(default)]
+    headers: HashMap<String, String>,
+    #[serde(default = "bool_true")]
+    enabled: bool,
+    #[serde(default = "default_call_timeout")]
+    call_timeout_secs: u64,
+  },
+}
+
+impl McpServerConfig {
+  pub fn is_enabled(&self) -> bool {
+    match self {
+      Self::Stdio { enabled, .. } => *enabled,
+      Self::Http { enabled, .. } => *enabled,
+    }
+  }
+  pub fn call_timeout_secs(&self) -> u64 {
+    match self {
+      Self::Stdio { call_timeout_secs, .. } => *call_timeout_secs,
+      Self::Http { call_timeout_secs, .. } => *call_timeout_secs,
+    }
+  }
 }
 
 // ---- Agent config (top-level) ----
@@ -142,6 +179,12 @@ pub struct AgentConfig {
   pub browser: BrowserConfig,
   #[serde(default)]
   pub mcp_servers: HashMap<String, McpServerConfig>,
+  /// Hard token budget – compaction triggers when prompt tokens exceed `token_budget * compact_threshold`.
+  #[serde(default = "default_token_budget")]
+  pub token_budget: usize,
+  /// Fraction of `token_budget` at which compaction kicks in (0.0 – 1.0).
+  #[serde(default = "default_compact_threshold")]
+  pub compact_threshold: f64,
 }
 
 fn default_active_provider() -> String {
@@ -153,6 +196,12 @@ fn default_system_prompt() -> String {
 }
 fn default_max_tool_rounds() -> u32 {
   10
+}
+fn default_token_budget() -> usize {
+  100_000
+}
+fn default_compact_threshold() -> f64 {
+  0.8
 }
 fn default_enabled_tools() -> Vec<String> {
   vec![
@@ -174,6 +223,8 @@ impl Default for AgentConfig {
       web_search: WebSearchConfig::default(),
       browser: BrowserConfig::default(),
       mcp_servers: HashMap::new(),
+      token_budget: default_token_budget(),
+      compact_threshold: default_compact_threshold(),
     }
   }
 }
@@ -190,6 +241,15 @@ pub struct SkillManifest {
   pub author: String,
   pub version: String,
   pub entry: String,
+  /// 始终注入此技能，不受对话语境影响（适用于个性化规则类技能）
+  #[serde(default)]
+  pub always: bool,
+  /// 此技能激活时允许使用的工具白名单（空列表 = 不限制）
+  #[serde(default)]
+  pub tools: Vec<String>,
+  /// 输出格式提示（如 "markdown" / "json" / "table"）
+  #[serde(default)]
+  pub output_format: Option<String>,
 }
 
 #[derive(Debug, Serialize, Clone)]

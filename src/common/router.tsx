@@ -4,8 +4,10 @@ import { RouteStatusCard } from "~/components";
 import { getErrorMessage } from "~/common/utils";
 import { MainLayout } from "~/layouts/MainLayout";
 import { ChatPage } from "~/pages/Chat";
+import { MemoryPage } from "~/pages/Memory";
 import { SettingsPage } from "~/pages/Settings";
 import { SkillsPage } from "~/pages/Skills";
+import { TasksPage } from "~/pages/Tasks";
 
 const RouteErrorElement = () => {
   const error = useRouteError();
@@ -46,6 +48,14 @@ export const router = createHashRouter([
           {
             path: ROUTE_PATHS.settings.slice(1),
             element: <SettingsPage />,
+          },
+          {
+            path: ROUTE_PATHS.memory.slice(1),
+            element: <MemoryPage />,
+          },
+          {
+            path: ROUTE_PATHS.tasks.slice(1),
+            element: <TasksPage />,
           },
           {
             path: "*",

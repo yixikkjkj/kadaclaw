@@ -1,8 +1,13 @@
-import { RobotOutlined, ToolOutlined, UserOutlined } from "@ant-design/icons";
-import { Alert, Button, Flex, Typography } from "antd";
+import {
+  BarChartOutlined,
+  RobotOutlined,
+  ToolOutlined,
+  UserOutlined,
+} from "@ant-design/icons";
+import { Alert, Button, Flex, Tag, Typography } from "antd";
 import classNames from "classnames";
 import dayjs from "dayjs";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import {
   normalizeChatMessage,
@@ -10,11 +15,12 @@ import {
   type NormalizedChatMessage,
 } from "~/common/chatMessage";
 import { ROUTE_PATHS } from "~/common/constants";
-import { ChatComposer, ChatMessageContent } from "~/components";
+import { ChatComposer, ChatMessageContent, TraceDrawer } from "~/components";
 import {
   selectActiveChatSession,
   useChatStore,
   useRuntimeStore,
+  useSkillStore,
 } from "~/store";
 import styles from "./index.css";
 
@@ -109,8 +115,12 @@ export const ChatPage = () => {
   const streamingRunning = useChatStore((state) => state.streamingRunning);
   const streamingSessionId = useChatStore((state) => state.streamingSessionId);
   const streamingStatus = useChatStore((state) => state.streamingStatus);
+  const streamingToolName = useChatStore((state) => state.streamingToolName);
   const streamingReply = useChatStore((state) => state.streamingReply);
+  const lastTokenUsage = useChatStore((state) => state.lastTokenUsage);
+  const readySkillIds = useSkillStore((state) => state.readySkillIds);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const [traceOpen, setTraceOpen] = useState(false);
 
   useEffect(() => {
     const container = scrollRef.current;
@@ -121,7 +131,9 @@ export const ChatPage = () => {
     container.scrollTop = container.scrollHeight;
   }, [activeChatSession, chatError, streamingRunning, streamingStatus]);
 
-  const executionStatus = normalizeStreamingStatus(streamingStatus);
+  const executionStatus = streamingToolName
+    ? `正在调用 ${streamingToolName}…`
+    : normalizeStreamingStatus(streamingStatus);
   const activeSessionTitle = activeChatSession?.title || "New Chat";
   const normalizedMessages = (activeChatSession?.messages ?? []).map(
     (message) => normalizeChatMessage(message),
@@ -160,9 +172,39 @@ export const ChatPage = () => {
         />
       ) : null}
 
-      <Title level={4} className={styles.workspaceTitle}>
-        {activeSessionTitle}
-      </Title>
+      <Flex
+        className={styles.chatTitleRow}
+        align="center"
+        justify="space-between"
+      >
+        <Title level={4} className={styles.workspaceTitle}>
+          {activeSessionTitle}
+        </Title>
+        <Button
+          type="text"
+          size="small"
+          icon={<BarChartOutlined />}
+          className={styles.traceButton}
+          onClick={() => setTraceOpen(true)}
+        >
+          Trace
+        </Button>
+      </Flex>
+
+      {readySkillIds.length > 0 ? (
+        <Flex className={styles.activeSkillsBar} align="center" gap={6} wrap>
+          <Text className={styles.activeSkillsLabel}>已激活技能：</Text>
+          {readySkillIds.map((id) => (
+            <Tag
+              key={id}
+              className={styles.activeSkillTag}
+              onClick={() => void navigate(ROUTE_PATHS.skills)}
+            >
+              {id}
+            </Tag>
+          ))}
+        </Flex>
+      ) : null}
 
       <div className={styles.chatMessageList} ref={scrollRef}>
         <div className={styles.conversationRail}>
@@ -266,7 +308,25 @@ export const ChatPage = () => {
         />
       ) : null}
 
+      {!streamingRunning && lastTokenUsage ? (
+        <div className={styles.tokenUsageBar}>
+          <Text className={styles.tokenUsageText}>
+            提示词 {lastTokenUsage.promptTokens.toLocaleString()} tokens
+            &nbsp;·&nbsp; 补全{" "}
+            {lastTokenUsage.completionTokens.toLocaleString()} tokens
+            &nbsp;·&nbsp; 合计 {lastTokenUsage.totalTokens.toLocaleString()}{" "}
+            tokens
+          </Text>
+        </div>
+      ) : null}
+
       <ChatComposer />
+
+      <TraceDrawer
+        open={traceOpen}
+        session={activeChatSession ?? null}
+        onClose={() => setTraceOpen(false)}
+      />
     </Flex>
   );
 };

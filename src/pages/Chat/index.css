@@ -12,6 +12,15 @@
   margin: 6px 0 0 !important;
 }
 
+.chatTitleRow {
+  padding: 0 24px 0 0;
+}
+
+.traceButton {
+  color: rgba(0, 0, 0, 0.45);
+  flex-shrink: 0;
+}
+
 .chatMessageList {
   flex: 1;
   min-width: 0;
@@ -175,7 +184,35 @@
 }
 
 .chatAlert {
-  margin: 0 24px 18px;
+  margin: 0 24px 8px;
+}
+
+.tokenUsageBar {
+  padding: 4px 24px 8px;
+  text-align: right;
+}
+
+.tokenUsageText {
+  font-size: 11px;
+  color: rgba(0, 0, 0, 0.35);
+}
+
+.activeSkillsBar {
+  padding: 4px 24px 6px;
+}
+
+.activeSkillsLabel {
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.45);
+}
+
+.activeSkillTag {
+  cursor: pointer;
+  font-size: 11px;
+
+  &:hover {
+    opacity: 0.8;
+  }
 }
 
 @media (max-width: 768px) {

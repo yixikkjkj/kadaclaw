@@ -8,7 +8,7 @@ use tokio::sync::mpsc;
 
 use crate::util::error::{KadaError, Result};
 
-use super::{ChatMessage, Provider, StreamChunk, ToolCall, ToolCallFunction};
+use super::{ChatMessage, Provider, StreamChunk, TokenUsage, ToolCall, ToolCallFunction};
 
 pub struct OpenAIProvider {
   client: Client,
@@ -47,6 +47,10 @@ impl OpenAIProvider {
         "temperature": self.temperature,
         "stream": stream,
     });
+    if stream {
+      // Request usage info in the final streaming chunk
+      body["stream_options"] = json!({ "include_usage": true });
+    }
     if !tools.is_empty() {
       body["tools"] = json!(tools);
       body["tool_choice"] = json!("auto");
@@ -135,6 +139,7 @@ impl Provider for OpenAIProvider {
     let mut buffer = String::new();
     let mut tool_acc: HashMap<usize, PartialToolCall> = HashMap::new();
     let mut finish_reason = String::from("stop");
+    let mut usage: Option<TokenUsage> = None;
 
     while let Some(chunk) = stream.next().await {
       let bytes = chunk?;
@@ -161,6 +166,17 @@ impl Provider for OpenAIProvider {
               if reason != "null" {
                 finish_reason = reason.to_string();
               }
+            }
+
+            // Capture usage from the extra chunk that OpenAI sends when stream_options.include_usage=true
+            if let Some(usage_val) = val.get("usage").filter(|v| !v.is_null()) {
+              let pt = usage_val["prompt_tokens"].as_u64().unwrap_or(0) as u32;
+              let ct = usage_val["completion_tokens"].as_u64().unwrap_or(0) as u32;
+              usage = Some(TokenUsage {
+                prompt_tokens: pt,
+                completion_tokens: ct,
+                total_tokens: pt + ct,
+              });
             }
 
             if let Some(delta_text) = val["choices"][0]["delta"]["content"].as_str() {
@@ -205,7 +221,13 @@ impl Provider for OpenAIProvider {
         .collect()
     };
 
-    let _ = tx.send(StreamChunk::Done { finish_reason, tool_calls }).await;
+    let _ = tx
+      .send(StreamChunk::Done {
+        finish_reason,
+        tool_calls,
+        usage,
+      })
+      .await;
     Ok(())
   }
 }

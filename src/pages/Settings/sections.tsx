@@ -3,25 +3,29 @@ import {
   Card,
   Checkbox,
   Col,
+  Divider,
   Flex,
   Form,
   Input,
+  Radio,
   Row,
   Select,
   Typography,
 } from "antd";
 import React from "react";
-import { type AgentConfig } from "~/api";
+import {
+  type AgentConfig,
+  type BrowserConfig,
+  type WebSearchConfig,
+} from "~/api";
 
 const { Paragraph, Text } = Typography;
-const { TextArea } = Input;
 
 export interface AgentFormValues {
   activeProvider: string;
   apiKey: string;
   apiBase: string;
   model: string;
-  systemPrompt: string;
   maxToolRounds: number;
 }
 
@@ -64,7 +68,6 @@ export const ProviderSection = ({
           apiKey: "",
           apiBase: providerConfig?.apiBase ?? "",
           model: providerConfig?.model ?? "",
-          systemPrompt: config?.systemPrompt ?? "",
           maxToolRounds: config?.maxToolRounds ?? 10,
         }}
       >
@@ -96,11 +99,6 @@ export const ProviderSection = ({
               <Input placeholder="https://api.openai.com/v1" />
             </Form.Item>
           </Col>
-          <Col xs={24}>
-            <Form.Item label="系统 Prompt" name="systemPrompt">
-              <TextArea rows={4} placeholder="你是一个有帮助的助理。" />
-            </Form.Item>
-          </Col>
           <Col xs={24} md={8}>
             <Form.Item label="最大工具调用轮次" name="maxToolRounds">
               <Input type="number" min={1} max={50} />
@@ -129,21 +127,56 @@ export const ProviderSection = ({
 export interface EnabledToolsSectionProps {
   availableTools: string[];
   enabledTools: string[];
+  webSearch: WebSearchConfig;
+  browser: BrowserConfig;
   loading: boolean;
-  onSave: (tools: string[]) => void;
+  onSave: (
+    tools: string[],
+    webSearch: WebSearchConfig,
+    browser: BrowserConfig,
+  ) => void;
 }
 
 export const EnabledToolsSection = ({
   availableTools,
   enabledTools,
+  webSearch,
+  browser,
   loading,
   onSave,
 }: EnabledToolsSectionProps) => {
   const [selected, setSelected] = React.useState<string[]>(enabledTools);
+  const [wsProvider, setWsProvider] = React.useState(
+    webSearch.provider ?? "duckduckgo",
+  );
+  const [tavilyKey, setTavilyKey] = React.useState(
+    webSearch.tavilyApiKey ?? "",
+  );
+  const [cdpPort, setCdpPort] = React.useState(String(browser.cdpPort ?? 9222));
 
   React.useEffect(() => {
     setSelected(enabledTools);
   }, [enabledTools]);
+
+  React.useEffect(() => {
+    setWsProvider(webSearch.provider ?? "duckduckgo");
+    setTavilyKey(webSearch.tavilyApiKey ?? "");
+  }, [webSearch]);
+
+  React.useEffect(() => {
+    setCdpPort(String(browser.cdpPort ?? 9222));
+  }, [browser]);
+
+  const showWebSearch = selected.includes("web_search");
+  const showBrowser = selected.includes("browse");
+
+  const handleSave = () => {
+    onSave(
+      selected,
+      { provider: wsProvider, tavilyApiKey: tavilyKey || null },
+      { ...browser, cdpPort: Number(cdpPort) || 9222 },
+    );
+  };
 
   return (
     <Card title="启用的工具">
@@ -156,12 +189,64 @@ export const EnabledToolsSection = ({
           value={selected}
           onChange={(vals) => setSelected(vals as string[])}
         />
+
+        {showWebSearch ? (
+          <>
+            <Divider orientationMargin={0}>Web Search 配置</Divider>
+            <Row gutter={[16, 0]}>
+              <Col xs={24}>
+                <Form.Item label="搜索引擎" style={{ marginBottom: 8 }}>
+                  <Radio.Group
+                    value={wsProvider}
+                    onChange={(e) => setWsProvider(e.target.value as string)}
+                  >
+                    <Radio value="duckduckgo">DuckDuckGo（免费）</Radio>
+                    <Radio value="tavily">Tavily（需 API Key）</Radio>
+                  </Radio.Group>
+                </Form.Item>
+              </Col>
+              {wsProvider === "tavily" ? (
+                <Col xs={24} md={16}>
+                  <Form.Item label="Tavily API Key" style={{ marginBottom: 8 }}>
+                    <Input.Password
+                      value={tavilyKey}
+                      onChange={(e) => setTavilyKey(e.target.value)}
+                      placeholder="tvly-..."
+                    />
+                  </Form.Item>
+                </Col>
+              ) : null}
+            </Row>
+          </>
+        ) : null}
+
+        {showBrowser ? (
+          <>
+            <Divider orientationMargin={0}>浏览器配置</Divider>
+            <Row gutter={[16, 0]}>
+              <Col xs={12} md={6}>
+                <Form.Item label="CDP 端口" style={{ marginBottom: 8 }}>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={65535}
+                    value={cdpPort}
+                    onChange={(e) => setCdpPort(e.target.value)}
+                    placeholder="9222"
+                  />
+                </Form.Item>
+              </Col>
+            </Row>
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              先在系统中启动 Chrome 并附带{" "}
+              <code>--remote-debugging-port={cdpPort}</code>，工具将通过 CDP
+              连接。
+            </Text>
+          </>
+        ) : null}
+
         <div>
-          <Button
-            type="primary"
-            loading={loading}
-            onClick={() => onSave(selected)}
-          >
+          <Button type="primary" loading={loading} onClick={handleSave}>
             保存工具配置
           </Button>
         </div>

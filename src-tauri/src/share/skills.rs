@@ -315,3 +315,64 @@ pub fn list_installed_skill_records(app: &AppHandle) -> Result<Vec<InstalledSkil
   records.sort_by(|a, b| a.id.cmp(&b.id));
   Ok(records)
 }
+
+// ---- skill injection ----
+
+pub struct SkillInjectionResult {
+  /// 注入到系统提示词末尾的技能说明文本（空字符串表示无技能）
+  pub injection: String,
+  /// 所有已启用技能声明的工具白名单（None 表示不限制）
+  pub tool_whitelist: Option<HashSet<String>>,
+}
+
+/// 读取所有已启用技能，构建注入文本与工具白名单。
+pub fn build_skill_injection(app: &AppHandle) -> Result<SkillInjectionResult, String> {
+  let records = list_installed_skill_records(app)?;
+  let enabled: Vec<_> = records.into_iter().filter(|r| r.enabled).collect();
+
+  if enabled.is_empty() {
+    return Ok(SkillInjectionResult {
+      injection: String::new(),
+      tool_whitelist: None,
+    });
+  }
+
+  let mut parts: Vec<String> =
+    vec!["---\n# 当前已启用的技能\n\n以下是可供调用的技能说明，请根据用户需求决定是否使用：\n".to_string()];
+  let mut declared_tools: Vec<String> = Vec::new();
+
+  for record in &enabled {
+    let skill_dir = PathBuf::from(&record.directory);
+
+    let manifest = match read_skill_manifest_from_dir(&skill_dir) {
+      Ok(m) => m,
+      Err(e) => {
+        tracing::warn!("跳过技能注入 {}: {e}", record.id);
+        continue;
+      },
+    };
+
+    let content = fs::read_to_string(skill_dir.join(&manifest.entry)).unwrap_or_else(|_| "（无说明文档）".to_string());
+
+    let format_hint = manifest
+      .output_format
+      .as_deref()
+      .map(|f| format!("\n> 输出格式：{f}"))
+      .unwrap_or_default();
+
+    parts.push(format!("## 技能：{}{}\n\n{}\n", record.name, format_hint, content));
+
+    declared_tools.extend(manifest.tools.into_iter());
+  }
+
+  // 如果所有技能都被跳过，返回空注入
+  let injection = if parts.len() <= 1 { String::new() } else { parts.join("\n") };
+
+  let tool_whitelist = if declared_tools.is_empty() {
+    None
+  } else {
+    Some(declared_tools.into_iter().collect::<HashSet<_>>())
+  };
+
+  Ok(SkillInjectionResult { injection, tool_whitelist })
+}

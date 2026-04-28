@@ -90,6 +90,14 @@ impl ChatMessage {
   }
 }
 
+/// Token usage reported by the LLM provider.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct TokenUsage {
+  pub prompt_tokens: u32,
+  pub completion_tokens: u32,
+  pub total_tokens: u32,
+}
+
 // ── Response types ─────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone)]
@@ -110,6 +118,8 @@ pub enum StreamChunk {
   Done {
     finish_reason: String,
     tool_calls: Vec<ToolCall>,
+    /// Token usage from the API response (if available).
+    usage: Option<TokenUsage>,
   },
   Error {
     message: String,
@@ -134,6 +144,7 @@ pub trait Provider: Send + Sync {
         StreamChunk::Done {
           finish_reason: fr,
           tool_calls: tc,
+          ..
         } => {
           finish_reason = fr;
           tool_calls = tc;

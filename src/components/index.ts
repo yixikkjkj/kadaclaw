@@ -6,4 +6,6 @@ export * from "./InstalledSkillsSection";
 export * from "./OnboardingModal";
 export * from "./RouteStatusCard";
 export * from "./SkillDetailDrawer";
+export * from "./TaskPlanView";
+export * from "./TraceDrawer";
 export * from "./WindowTitleBar";

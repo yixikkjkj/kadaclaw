@@ -1,11 +1,22 @@
 import {
   AppstoreOutlined,
+  DatabaseOutlined,
   DeleteOutlined,
   MessageOutlined,
+  OrderedListOutlined,
   PlusOutlined,
   SettingOutlined,
 } from "@ant-design/icons";
-import { Button, Flex, Layout, Menu, MenuProps, Popconfirm, Tooltip, Typography } from "antd";
+import {
+  Button,
+  Flex,
+  Layout,
+  Menu,
+  MenuProps,
+  Popconfirm,
+  Tooltip,
+  Typography,
+} from "antd";
 import dayjs from "dayjs";
 import { useLocation, useNavigate } from "react-router";
 import { ROUTE_PATHS } from "~/common/constants";
@@ -49,7 +60,9 @@ const buildChatMenuItem = (
 });
 
 export const Sidebar = () => {
-  const activeChatSessionId = useChatStore((state) => state.activeChatSessionId);
+  const activeChatSessionId = useChatStore(
+    (state) => state.activeChatSessionId,
+  );
   const chatSessions = useChatStore((state) => state.chatSessions);
   const activateSession = useChatStore((state) => state.activateSession);
   const createSession = useChatStore((state) => state.createSession);
@@ -57,7 +70,8 @@ export const Sidebar = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const sortedChatSessions = [...chatSessions].sort(
-    (left, right) => dayjs(right.updatedAt).valueOf() - dayjs(left.updatedAt).valueOf(),
+    (left, right) =>
+      dayjs(right.updatedAt).valueOf() - dayjs(left.updatedAt).valueOf(),
   );
 
   const now = dayjs();
@@ -150,17 +164,26 @@ export const Sidebar = () => {
   ];
   const bottomMenuItems: NonNullable<MenuProps["items"]> = [
     { key: ROUTE_PATHS.skills, icon: <AppstoreOutlined />, label: "技能中心" },
+    {
+      key: ROUTE_PATHS.tasks,
+      icon: <OrderedListOutlined />,
+      label: "计划任务",
+    },
+    { key: ROUTE_PATHS.memory, icon: <DatabaseOutlined />, label: "长期记忆" },
     { key: ROUTE_PATHS.settings, icon: <SettingOutlined />, label: "设置" },
   ];
   const selectedKey =
     location.pathname === ROUTE_PATHS.chat && activeChatSessionId
       ? `chat:${activeChatSessionId}`
       : String(
-          bottomMenuItems.find((item) => item && "key" in item && location.pathname === item.key)
-            ?.key ?? ROUTE_PATHS.skills,
+          bottomMenuItems.find(
+            (item) => item && "key" in item && location.pathname === item.key,
+          )?.key ?? ROUTE_PATHS.skills,
         );
   const chatSelectedKeys = selectedKey.startsWith("chat:") ? [selectedKey] : [];
-  const bottomSelectedKeys = selectedKey.startsWith("chat:") ? [] : [selectedKey];
+  const bottomSelectedKeys = selectedKey.startsWith("chat:")
+    ? []
+    : [selectedKey];
 
   const handleMenuClick: MenuProps["onClick"] = ({ key }) => {
     const keyValue = String(key);

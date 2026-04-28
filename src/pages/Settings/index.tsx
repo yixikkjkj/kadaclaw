@@ -5,8 +5,12 @@ import {
   listAvailableTools,
   saveAgentConfig,
   type AgentConfig,
+  type BrowserConfig,
+  type WebSearchConfig,
 } from "~/api";
 import { useRuntimeStore, useSkillStore } from "~/store";
+import { McpServersSection } from "./McpServersSection";
+import { SystemPromptSection } from "./SystemPromptSection";
 import {
   type AgentFormValues,
   EnabledToolsSection,
@@ -53,7 +57,6 @@ export const SettingsPage = () => {
       const nextConfig: AgentConfig = {
         ...agentConfig,
         activeProvider: values.activeProvider,
-        systemPrompt: values.systemPrompt,
         maxToolRounds: Number(values.maxToolRounds),
         providers: {
           ...agentConfig.providers,
@@ -81,16 +84,55 @@ export const SettingsPage = () => {
     }
   };
 
-  const saveTools = async (tools: string[]) => {
+  const saveSystemPrompt = async (prompt: string) => {
     if (!agentConfig) return;
     setLoading(true);
     try {
-      const nextConfig: AgentConfig = { ...agentConfig, enabledTools: tools };
+      const nextConfig: AgentConfig = { ...agentConfig, systemPrompt: prompt };
+      const saved = await saveAgentConfig(nextConfig);
+      setAgentConfig(saved);
+      void message.success("系统提示词已保存");
+    } catch (error) {
+      void message.error(`保存失败: ${String(error)}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const saveTools = async (
+    tools: string[],
+    webSearch: WebSearchConfig,
+    browser: BrowserConfig,
+  ) => {
+    if (!agentConfig) return;
+    setLoading(true);
+    try {
+      const nextConfig: AgentConfig = {
+        ...agentConfig,
+        enabledTools: tools,
+        webSearch,
+        browser,
+      };
       const saved = await saveAgentConfig(nextConfig);
       setAgentConfig(saved);
       void message.success("工具配置已保存");
     } catch (error) {
       void message.error(`保存工具配置失败: ${String(error)}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const saveMcpServers = async (servers: AgentConfig["mcpServers"]) => {
+    if (!agentConfig) return;
+    setLoading(true);
+    try {
+      const nextConfig: AgentConfig = { ...agentConfig, mcpServers: servers };
+      const saved = await saveAgentConfig(nextConfig);
+      setAgentConfig(saved);
+      void message.success("MCP 配置已保存并重启");
+    } catch (error) {
+      void message.error(`保存 MCP 配置失败: ${String(error)}`);
     } finally {
       setLoading(false);
     }
@@ -103,14 +145,27 @@ export const SettingsPage = () => {
         loading={loading}
         onSave={(v) => void saveProvider(v)}
       />
+      <SystemPromptSection
+        value={agentConfig?.systemPrompt ?? ""}
+        loading={loading}
+        onSave={saveSystemPrompt}
+      />
       {availableTools.length > 0 ? (
         <EnabledToolsSection
           availableTools={availableTools}
           enabledTools={agentConfig?.enabledTools ?? []}
+          webSearch={agentConfig?.webSearch ?? { provider: "duckduckgo" }}
+          browser={
+            agentConfig?.browser ?? { cdpPort: 9222, connectTimeoutSecs: 10 }
+          }
           loading={loading}
-          onSave={(tools) => void saveTools(tools)}
+          onSave={(tools, ws, br) => void saveTools(tools, ws, br)}
         />
       ) : null}
+      <McpServersSection
+        mcpServers={agentConfig?.mcpServers ?? {}}
+        onChange={(servers) => void saveMcpServers(servers)}
+      />
     </Flex>
   );
 };

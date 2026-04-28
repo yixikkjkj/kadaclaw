@@ -1,8 +1,11 @@
 pub mod agent;
 pub mod config;
 pub mod history;
+pub mod memory;
 pub mod models;
+pub mod plan;
 pub mod providers;
 pub mod runtime_config;
 pub mod skills;
+pub mod telemetry;
 pub mod tools;
